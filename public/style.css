@@ -1,0 +1,255 @@
+:root {
+  --pink: #ff2d8a;
+  --pink-dim: rgba(255, 45, 138, 0.12);
+  --black: #000000;
+  --white: #ffffff;
+  --slate: rgba(0, 0, 0, 0.55);
+  --slant: -6deg;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--white);
+  color: var(--black);
+  font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#app {
+  width: 100%;
+  max-width: 480px;
+  padding: 32px 24px;
+}
+
+.screen {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 28px;
+  min-height: 70vh;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.screen.active {
+  display: flex;
+  opacity: 1;
+}
+
+.logo {
+  width: min(100%, 340px);
+  height: auto;
+  transform: rotate(var(--slant));
+  margin-bottom: 8px;
+}
+
+.logo-small {
+  width: min(100%, 240px);
+  margin-bottom: 0;
+}
+
+h2 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transform: rotate(var(--slant));
+  line-height: 1.3;
+}
+
+.sub-text {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--slate);
+  letter-spacing: 0.02em;
+}
+
+.sub-text.amount {
+  font-size: 1.5rem;
+  font-style: italic;
+  color: var(--pink);
+  text-transform: uppercase;
+}
+
+.button-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+#screen-home .btn {
+  transform: none;
+}
+
+#screen-home .btn:active {
+  transform: scale(0.98);
+}
+
+#screen-promo-entry h2,
+#screen-promo-entry #promo-input,
+#screen-promo-entry .btn {
+  transform: none;
+}
+
+#screen-promo-entry .btn:active {
+  transform: scale(0.98);
+}
+
+#screen-promo-success h2,
+#screen-promo-success .btn {
+  transform: none;
+}
+
+#screen-promo-success .btn:active {
+  transform: scale(0.98);
+}
+
+#screen-promo-failed h2,
+#screen-promo-failed .btn {
+  transform: none;
+}
+
+#screen-promo-failed .btn:active {
+  transform: scale(0.98);
+}
+
+.btn {
+  width: 100%;
+  min-height: 64px;
+  border-radius: 14px;
+  font-family: inherit;
+  font-size: 17px;
+  font-weight: 800;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transform: rotate(var(--slant));
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.btn:active {
+  transform: rotate(var(--slant)) scale(0.98);
+  opacity: 0.9;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background-color: var(--pink);
+  color: var(--black);
+  box-shadow: 0 4px 24px rgba(255, 45, 138, 0.35);
+}
+
+.btn-primary:active {
+  box-shadow: 0 2px 12px rgba(255, 45, 138, 0.25);
+}
+
+.btn-secondary {
+  background-color: transparent;
+  color: var(--pink);
+  border: 2px solid var(--pink);
+}
+
+.icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.75rem;
+  line-height: 1;
+  font-weight: 800;
+  transform: rotate(var(--slant));
+}
+
+.icon-success {
+  background-color: var(--pink-dim);
+  color: var(--pink);
+  border: 3px solid var(--pink);
+}
+
+.icon-error {
+  background-color: rgba(255, 45, 138, 0.08);
+  color: var(--pink);
+  border: 3px solid var(--pink);
+}
+
+.spinner {
+  width: 52px;
+  height: 52px;
+  border: 4px solid var(--pink-dim);
+  border-top-color: var(--pink);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.btn-spinner {
+  width: 22px;
+  height: 22px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  border-top-color: var(--black);
+  border-radius: 50%;
+  animation: spin 0.75s linear infinite;
+}
+
+.hidden {
+  display: none;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#promo-input {
+  width: 100%;
+  min-height: 64px;
+  padding: 0 20px;
+  font-family: inherit;
+  font-size: 20px;
+  font-weight: 800;
+  font-style: italic;
+  border-radius: 14px;
+  border: 2px solid var(--pink);
+  background-color: var(--white);
+  color: var(--pink);
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  outline: none;
+  transform: rotate(var(--slant));
+  transition: box-shadow 0.15s ease;
+}
+
+#promo-input:focus {
+  box-shadow: 0 0 0 3px rgba(255, 45, 138, 0.25);
+}
+
+#promo-input::placeholder {
+  color: rgba(255, 45, 138, 0.4);
+  font-weight: 700;
+}

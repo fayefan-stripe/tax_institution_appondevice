@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Social Booth</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="app">
+
+    <!-- Home -->
+    <div id="screen-home" class="screen active">
+      <img src="logo.png" alt="Social Booth" class="logo">
+      <div class="button-group">
+        <button id="btn-pay-now" class="btn btn-primary">Pay Now</button>
+        <button id="btn-pay-promo" class="btn btn-secondary">Pay with Promo</button>
+      </div>
+    </div>
+
+    <!-- Processing -->
+    <div id="screen-processing" class="screen">
+      <img src="logo.png" alt="Social Booth" class="logo logo-small">
+      <div class="spinner"></div>
+      <h2>Waiting for card…</h2>
+      <p class="sub-text">Please tap, insert, or swipe on the reader.</p>
+      <button id="btn-cancel-payment" class="btn btn-secondary">Cancel</button>
+    </div>
+
+    <!-- Payment Success -->
+    <div id="screen-payment-success" class="screen">
+      <div class="icon icon-success">✓</div>
+      <h2>Payment successful!</h2>
+      <p class="sub-text amount">$8.00 AUD</p>
+      <button id="btn-payment-done" class="btn btn-primary">Done</button>
+    </div>
+
+    <!-- Payment Failed -->
+    <div id="screen-payment-failed" class="screen">
+      <div class="icon icon-error">✗</div>
+      <h2>Payment unsuccessful</h2>
+      <p class="sub-text">Please try again or contact staff.</p>
+      <button id="btn-payment-retry" class="btn btn-primary">Try Again</button>
+    </div>
+
+    <!-- Promo Entry -->
+    <div id="screen-promo-entry" class="screen">
+      <img src="logo.png" alt="Social Booth" class="logo logo-small">
+      <h2>Enter Promo Code</h2>
+      <input
+        id="promo-input"
+        type="text"
+        placeholder="e.g. DEMO2026"
+        autocomplete="off"
+        autocorrect="off"
+        autocapitalize="characters"
+      >
+      <div class="button-group">
+        <button id="btn-validate-promo" class="btn btn-primary">
+          <span id="validate-label">Validate</span>
+          <span id="validate-spinner" class="btn-spinner hidden"></span>
+        </button>
+        <button id="btn-promo-back" class="btn btn-secondary">Back</button>
+      </div>
+    </div>
+
+    <!-- Promo Success -->
+    <div id="screen-promo-success" class="screen">
+      <div class="icon icon-success">✓</div>
+      <h2>Promo code accepted!</h2>
+      <button id="btn-promo-done" class="btn btn-primary">Done</button>
+    </div>
+
+    <!-- Promo Failed -->
+    <div id="screen-promo-failed" class="screen">
+      <div class="icon icon-error">✗</div>
+      <h2 id="promo-failed-message">Invalid promo code. Please try again.</h2>
+      <button id="btn-promo-retry" class="btn btn-primary">Try Again</button>
+    </div>
+
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

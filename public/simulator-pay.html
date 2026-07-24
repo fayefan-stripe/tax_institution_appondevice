@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Social Booth — Pay</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,800;1,800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+      #simulator-pay {
+        width: 100%;
+        max-width: 480px;
+        padding: 32px 24px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        text-align: center;
+      }
+      #card-element {
+        width: 100%;
+        padding: 16px;
+        border: 2px solid var(--pink);
+        border-radius: 14px;
+        background: var(--white);
+      }
+      #simulator-pay .btn {
+        transform: none;
+      }
+      #simulator-pay .btn:active {
+        transform: scale(0.98);
+      }
+      #pay-message {
+        font-weight: 700;
+        color: var(--slate);
+      }
+      #pay-message.error {
+        color: #ff4444;
+      }
+      #pay-message.success {
+        color: #00d66b;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="simulator-pay">
+      <img src="/logo.png" alt="Social Booth" style="max-width: 240px; height: auto" />
+      <h2 style="transform: none">Complete payment</h2>
+      <p style="font-weight: 800; color: var(--pink); font-style: italic">$8.00 AUD</p>
+      <form id="payment-form" style="width: 100%; display: flex; flex-direction: column; gap: 16px">
+        <div id="card-element"></div>
+        <button id="pay-btn" type="submit" class="btn btn-primary">Pay $8.00</button>
+      </form>
+      <p id="pay-message">Use test card 4242 4242 4242 4242.</p>
+    </div>
+    <script>
+      const params = new URLSearchParams(window.location.search);
+      const paymentIntentId = params.get('pi');
+      const messageEl = document.getElementById('pay-message');
+      const form = document.getElementById('payment-form');
+      const payBtn = document.getElementById('pay-btn');
+
+      if (!paymentIntentId) {
+        messageEl.textContent = 'Missing payment intent.';
+        messageEl.className = 'error';
+        form.style.display = 'none';
+      } else {
+        fetch(`/api/simulator-payment-intent/${paymentIntentId}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.error) throw new Error(data.error);
+            if (data.status === 'succeeded') {
+              messageEl.textContent = 'Payment already completed.';
+              messageEl.className = 'success';
+              form.style.display = 'none';
+              return;
+            }
+
+            const stripe = Stripe(data.publishableKey);
+            const elements = stripe.elements();
+            const card = elements.create('card', {
+              style: {
+                base: {
+                  fontFamily: 'Montserrat, sans-serif',
+                  fontSize: '16px',
+                  color: '#000',
+                },
+              },
+            });
+            card.mount('#card-element');
+
+            form.addEventListener('submit', async (event) => {
+              event.preventDefault();
+              payBtn.disabled = true;
+              messageEl.textContent = 'Processing…';
+              messageEl.className = '';
+
+              const { error } = await stripe.confirmCardPayment(data.clientSecret, {
+                payment_method: { card },
+              });
+
+              if (error) {
+                messageEl.textContent = error.message;
+                messageEl.className = 'error';
+                payBtn.disabled = false;
+                return;
+              }
+
+              messageEl.textContent = 'Payment successful! You can close this page.';
+              messageEl.className = 'success';
+              form.style.display = 'none';
+            });
+          })
+          .catch((err) => {
+            messageEl.textContent = err.message || 'Could not load payment.';
+            messageEl.className = 'error';
+            form.style.display = 'none';
+          });
+      }
+    </script>
+  </body>
+</html>
