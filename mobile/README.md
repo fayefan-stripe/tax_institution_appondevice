@@ -93,7 +93,7 @@ export const BACKEND_HOST_LAN = '192.168.x.x';
 **Production (S710 anywhere with internet):** deploy backend to Vercel (see below), then set:
 
 ```ts
-export const API_BASE_URL = 'https://your-app.vercel.app';
+export const API_BASE_URL = 'https://social-booth-app-on-device.vercelapp.stripe.dev';
 ```
 
 Rebuild the release APK after changing config.
@@ -118,19 +118,30 @@ Set environment variables in the Vercel project (same keys as `.env.example`):
 - `STRIPE_PUBLISHABLE_KEY`
 - `STRIPE_READER_ID`
 - `PROMO_CODE`, `PROMO_VALID_FROM`, `PROMO_VALID_UNTIL`
-- `PUBLIC_BASE_URL` = your production URL (e.g. `https://your-app.vercel.app`)
+- `PUBLIC_BASE_URL` = `https://social-booth-app-on-device.vercelapp.stripe.dev`
+- `VERCEL_PROTECTION_BYPASS` = your 32-char bypass secret (for simulator pay URLs)
+
+### 1b — Vercel Deployment Protection bypass (mobile app)
+
+If Deployment Protection is enabled, create a bypass secret under **Settings → Deployment Protection → Protection Bypass for Automation**.
+
+1. Copy the secret into `mobile/src/secrets.ts` (create from `secrets.example.ts` — **gitignored**)
+2. Add the same value as `VERCEL_PROTECTION_BYPASS` in Vercel env vars (for simulator pay page)
+
+The mobile app sends `x-vercel-protection-bypass` on every API request to your Vercel domain.
 
 ### 2 — Smoke-test
 
 ```bash
-curl -X POST https://your-app.vercel.app/api/validate-promo \
+curl -X POST https://social-booth-app-on-device.vercelapp.stripe.dev/api/validate-promo \
   -H 'Content-Type: application/json' \
+  -H 'x-vercel-protection-bypass: YOUR_BYPASS_SECRET' \
   -d '{"code":"YOUR_PROMO_CODE"}'
 ```
 
 ### 3 — Point the mobile app
 
-Set `API_BASE_URL` in `mobile/src/config.ts`, bump `versionCode`, rebuild APK, redeploy to S710.
+Set `API_BASE_URL` in `mobile/src/config.ts` and ensure `mobile/src/secrets.ts` has your bypass token. Bump `versionCode`, rebuild APK, redeploy to S710.
 
 Emulator dev still uses `http://10.0.2.2:3000` with local `npm run dev` — no Vercel URL needed on emulator.
 

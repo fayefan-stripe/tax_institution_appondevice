@@ -3,10 +3,10 @@ import { isAndroidEmulator } from './device';
 export const BACKEND_PORT = 3000;
 
 /**
- * Public backend URL — set after Vercel deploy, e.g. https://your-app.vercel.app
- * Leave empty to use BACKEND_HOST_LAN on physical devices (local Wi‑Fi dev).
+ * Public backend URL — production Vercel deployment.
+ * Leave empty to fall back to BACKEND_HOST_LAN (local Wi‑Fi dev only).
  */
-export const API_BASE_URL = '';
+export const API_BASE_URL = 'https://social-booth-app-on-device.vercelapp.stripe.dev';
 
 // Your laptop's Wi-Fi IP — fallback when API_BASE_URL is empty (same network as S710).
 // Find it with: ipconfig getifaddr en0

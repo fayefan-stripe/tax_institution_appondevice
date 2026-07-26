@@ -104,6 +104,15 @@ function getPublicBaseUrl(req) {
   return `http://localhost:${PORT}`;
 }
 
+function appendVercelBypass(url) {
+  const secret = process.env.VERCEL_PROTECTION_BYPASS;
+  if (!secret) {
+    return url;
+  }
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}x-vercel-protection-bypass=${encodeURIComponent(secret)}`;
+}
+
 app.post('/api/create-simulator-payment-intent', async (req, res) => {
   try {
     const payBaseUrl = getPublicBaseUrl(req);
@@ -116,7 +125,7 @@ app.post('/api/create-simulator-payment-intent', async (req, res) => {
 
     res.json({
       paymentIntentId: paymentIntent.id,
-      payUrl: `${payBaseUrl}/simulator-pay.html?pi=${paymentIntent.id}`,
+      payUrl: appendVercelBypass(`${payBaseUrl}/simulator-pay.html?pi=${paymentIntent.id}`),
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
