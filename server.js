@@ -91,9 +91,22 @@ app.post('/api/cancel-payment', async (req, res) => {
   }
 });
 
+function getPublicBaseUrl(req) {
+  if (req.body?.payBaseUrl) {
+    return req.body.payBaseUrl.replace(/\/$/, '');
+  }
+  if (process.env.PUBLIC_BASE_URL) {
+    return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
+  }
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL}`;
+  }
+  return `http://localhost:${PORT}`;
+}
+
 app.post('/api/create-simulator-payment-intent', async (req, res) => {
   try {
-    const payBaseUrl = (req.body.payBaseUrl || `http://localhost:${PORT}`).replace(/\/$/, '');
+    const payBaseUrl = getPublicBaseUrl(req);
 
     const paymentIntent = await stripe.paymentIntents.create({
       amount: 800,
@@ -152,7 +165,11 @@ app.post('/api/validate-promo', (req, res) => {
   return res.json({ valid: false, reason: 'expired' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log('Mobile app: set API_BASE_URL in mobile/src/config.ts to http://<this-laptop-ip>:3000');
-});
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running at http://localhost:${PORT}`);
+    console.log('Mobile app: set API_BASE_URL in mobile/src/config.ts (Vercel) or BACKEND_HOST_LAN (local Wi‑Fi)');
+  });
+}
+
+module.exports = app;

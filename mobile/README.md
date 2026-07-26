@@ -74,23 +74,65 @@ Edit `mobile/src/config.ts`:
 
 | Setting | Purpose |
 |---------|---------|
-| `BACKEND_HOST_LAN` | Your laptop's Wi-Fi IP — used on **physical S710** |
-| `getApiBaseUrl()` | Auto: emulator → `10.0.2.2`, device → `BACKEND_HOST_LAN` |
+| `API_BASE_URL` | **Production:** your Vercel URL (e.g. `https://your-app.vercel.app`). Leave `''` for local Wi‑Fi dev. |
+| `BACKEND_HOST_LAN` | Fallback laptop Wi‑Fi IP when `API_BASE_URL` is empty |
+| `getApiBaseUrl()` | Auto: emulator → `10.0.2.2`, device → `API_BASE_URL` or `BACKEND_HOST_LAN` |
 | `isSimulatorMode()` | Auto: emulator skips reader discovery; S710 connects |
 
-Find your laptop IP:
+**Local dev (S710 on same Wi‑Fi as laptop):** leave `API_BASE_URL = ''` and set `BACKEND_HOST_LAN`:
 
 ```bash
 ipconfig getifaddr en0
 ```
 
-Set it in config:
-
 ```ts
+export const API_BASE_URL = '';
 export const BACKEND_HOST_LAN = '192.168.x.x';
 ```
 
-Emulator and physical device are detected automatically — no need to change URLs when switching.
+**Production (S710 anywhere with internet):** deploy backend to Vercel (see below), then set:
+
+```ts
+export const API_BASE_URL = 'https://your-app.vercel.app';
+```
+
+Rebuild the release APK after changing config.
+
+---
+
+## Deploy backend to Vercel
+
+Use a stable HTTPS URL so the S710 does not depend on your laptop IP.
+
+### 1 — Deploy
+
+From the repo root:
+
+```bash
+npx vercel
+```
+
+Set environment variables in the Vercel project (same keys as `.env.example`):
+
+- `STRIPE_SECRET_KEY`
+- `STRIPE_PUBLISHABLE_KEY`
+- `STRIPE_READER_ID`
+- `PROMO_CODE`, `PROMO_VALID_FROM`, `PROMO_VALID_UNTIL`
+- `PUBLIC_BASE_URL` = your production URL (e.g. `https://your-app.vercel.app`)
+
+### 2 — Smoke-test
+
+```bash
+curl -X POST https://your-app.vercel.app/api/validate-promo \
+  -H 'Content-Type: application/json' \
+  -d '{"code":"YOUR_PROMO_CODE"}'
+```
+
+### 3 — Point the mobile app
+
+Set `API_BASE_URL` in `mobile/src/config.ts`, bump `versionCode`, rebuild APK, redeploy to S710.
+
+Emulator dev still uses `http://10.0.2.2:3000` with local `npm run dev` — no Vercel URL needed on emulator.
 
 ---
 
@@ -219,8 +261,8 @@ The Social Booth app should open in the emulator.
 ## Run on S710 DevKit (USB)
 
 1. Complete [one-time setup](#one-time-setup) above
-2. Set `API_BASE_URL` to `http://YOUR_LAPTOP_IP:3000` in `config.ts`
-3. Set `SIMULATOR_MODE = false` in `config.ts`
+2. Set `API_BASE_URL` to your Vercel URL, or leave empty and set `BACKEND_HOST_LAN` for local Wi‑Fi
+3. Emulator vs S710 is detected automatically — no manual simulator flag
 4. Connect DevKit via USB and enable USB debugging
 5. Verify: `adb devices` shows your reader
 6. Run backend (`npm run dev`), Metro (`npm start`), then `npm run android`
@@ -242,7 +284,7 @@ Docs: [Submit your app](https://docs.stripe.com/terminal/features/apps-on-device
 | **Apps on Devices** | Enabled on your Stripe account (contact Stripe if needed) |
 | **S710 registered** | Dashboard → **Terminal → Readers** |
 | **Location created** | Dashboard → **Terminal → Locations** |
-| **Production config** | In `src/config.ts`: set `SIMULATOR_MODE = false` and `API_BASE_URL` to a URL the reader can reach (not `10.0.2.2`) |
+| **Production config** | In `src/config.ts`: set `API_BASE_URL` to your Vercel HTTPS URL (or `BACKEND_HOST_LAN` for local Wi‑Fi) |
 | **Package name** | `com.socialboothmobile` — must match Dashboard exactly |
 
 ### Step 1 — Bump version and build a release APK
@@ -338,14 +380,14 @@ The reader downloads the app, reboots, and installs it. Reboot manually to apply
 
 1. Reader shows **Online** in **Terminal → Readers**
 2. Backend is running with valid `.env`
-3. `API_BASE_URL` in the app is reachable from the reader (your laptop IP or hosted server)
+3. `API_BASE_URL` (or `BACKEND_HOST_LAN`) is reachable from the reader
 4. Social Booth launches as the kiosk app on the reader
 
 ### Upload checklist
 
 ```
 [ ] Apps on Devices enabled
-[ ] SIMULATOR_MODE = false, API_BASE_URL set for reader network
+[ ] API_BASE_URL or BACKEND_HOST_LAN set in mobile/src/config.ts
 [ ] Bump versionCode in mobile/android/app/build.gradle
 [ ] ./gradlew assembleRelease
 [ ] Dashboard → Terminal → Software → Create app (com.socialboothmobile)
@@ -381,7 +423,7 @@ mobile/
 ├── App.tsx              # Screens + payment/promo flow
 ├── Root.tsx             # StripeTerminalProvider (AoD token provider)
 ├── src/
-│   ├── config.ts        # API_BASE_URL, SIMULATOR_MODE
+│   ├── config.ts        # API_BASE_URL, BACKEND_HOST_LAN
 │   ├── api.ts           # Backend fetch helpers
 │   ├── theme.ts         # Social Booth colors
 │   └── components/      # Logo, Button
@@ -428,8 +470,8 @@ Set `ANDROID_HOME` and create `mobile/android/local.properties` — see [one-tim
 ### `Network error` on promo
 
 - Backend must be running (`npm run dev`)
-- Emulator: `API_BASE_URL = http://10.0.2.2:3000`
-- Physical device: use laptop Wi‑Fi IP, same network
+- Emulator: local backend at `10.0.2.2:3000` (automatic)
+- Physical device: `API_BASE_URL` (Vercel) or `BACKEND_HOST_LAN` (Wi‑Fi)
 
 ### Pay button disabled (DevKit) / stuck on "Connecting to reader…"
 
