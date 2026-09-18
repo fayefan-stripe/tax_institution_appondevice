@@ -12,9 +12,10 @@
 <body>
   <main id="app">
 
-    <div id="screen-customer-select" class="screen active">
+    <div id="screen-checkout" class="screen active">
       <h1 class="app-title">Tax Institution</h1>
-      <p class="sub-text">Select a customer</p>
+      <p class="sub-text">Select customer and product</p>
+
       <label class="field-label" for="customer-search">Customer</label>
       <div class="dropdown-wrap">
         <input
@@ -27,55 +28,43 @@
         <div id="customer-dropdown" class="dropdown-panel" hidden></div>
       </div>
       <p id="customer-selected-hint" class="selected-hint" hidden></p>
-      <div class="button-group">
-        <button id="btn-continue-customer" class="btn btn-primary" disabled>Continue</button>
-        <button id="btn-toggle-create-customer" class="btn btn-secondary">Create new customer</button>
-      </div>
+      <button id="btn-toggle-create-customer" class="btn btn-secondary">Create new customer</button>
       <div id="create-customer-panel" class="create-panel" hidden>
-        <label class="field-label" for="customer-name">New customer</label>
         <input id="customer-name" type="text" placeholder="Full name" autocomplete="name">
         <input id="customer-email" type="email" placeholder="Email (optional)" autocomplete="email">
         <button id="btn-save-customer" class="btn btn-primary">Save customer</button>
       </div>
-    </div>
 
-    <div id="screen-product-select" class="screen">
-      <h1 class="app-title">Tax Institution</h1>
-      <p id="product-select-subtitle" class="sub-text">Select a product</p>
-      <div id="product-list" class="item-list"></div>
-      <div class="button-group">
-        <button id="btn-new-product" class="btn btn-secondary">Create new product</button>
-        <button id="btn-product-back" class="btn btn-secondary">Change customer</button>
-        <button id="btn-refresh-products" class="btn btn-secondary">Refresh</button>
+      <div class="section-divider"></div>
+
+      <label class="field-label" for="product-search">Product</label>
+      <div class="dropdown-wrap">
+        <input
+          id="product-search"
+          type="text"
+          placeholder="Search by product name"
+          autocomplete="off"
+          autocorrect="off"
+        >
+        <div id="product-dropdown" class="dropdown-panel" hidden></div>
       </div>
-    </div>
-
-    <div id="screen-product-create" class="screen">
-      <h1 class="app-title">Tax Institution</h1>
-      <h2>New product</h2>
-      <input id="product-name" type="text" placeholder="Product name">
-      <input id="product-amount" type="text" inputmode="decimal" placeholder="Price in AUD (e.g. 8.00)">
-      <div class="button-group">
+      <p id="product-selected-hint" class="selected-hint" hidden></p>
+      <button id="btn-toggle-create-product" class="btn btn-secondary">Create new product</button>
+      <div id="create-product-panel" class="create-panel" hidden>
+        <input id="product-name" type="text" placeholder="Product name">
+        <input id="product-amount" type="text" inputmode="decimal" placeholder="Price in AUD (e.g. 8.00)">
         <button id="btn-save-product" class="btn btn-primary">Save product</button>
-        <button id="btn-product-create-back" class="btn btn-secondary">Back</button>
       </div>
-    </div>
 
-    <div id="screen-review" class="screen">
-      <h1 class="app-title">Tax Institution</h1>
-      <h2>Review and pay</h2>
-      <div class="summary-card">
-        <p class="summary-label">Customer</p>
-        <p id="review-customer" class="summary-value"></p>
-        <p class="summary-label">Product</p>
-        <p id="review-product" class="summary-value"></p>
-        <p class="summary-label">Amount</p>
-        <p id="review-amount" class="summary-amount"></p>
+      <div id="checkout-summary" class="summary-card" hidden>
+        <p class="summary-label">Ready to charge</p>
+        <p id="summary-customer" class="summary-value"></p>
+        <p id="summary-product" class="summary-value"></p>
+        <p id="summary-amount" class="summary-amount"></p>
       </div>
+
       <div class="button-group">
-        <button id="btn-collect-payment" class="btn btn-primary">Collect payment on reader</button>
-        <button id="btn-review-change-product" class="btn btn-secondary">Change product</button>
-        <button id="btn-review-change-customer" class="btn btn-secondary">Change customer</button>
+        <button id="btn-collect-payment" class="btn btn-primary" disabled>Collect payment on reader</button>
       </div>
     </div>
 

@@ -35,15 +35,7 @@ import {
 import { formatMoney, getApiBaseUrl, isSimulatorMode } from './src/config';
 import { theme } from './src/theme';
 
-type Screen =
-  | 'customer-select'
-  | 'product-select'
-  | 'product-create'
-  | 'review'
-  | 'processing'
-  | 'payment-success'
-  | 'payment-failed'
-  | 'simulator-pay-qr';
+type Screen = 'checkout' | 'processing' | 'payment-success' | 'payment-failed' | 'simulator-pay-qr';
 
 function parseDollarsToCents(value: string): number | null {
   const trimmed = value.trim();
@@ -58,10 +50,12 @@ function parseDollarsToCents(value: string): number | null {
 }
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('customer-select');
+  const [screen, setScreen] = useState<Screen>('checkout');
   const [hasPerms, setHasPerms] = useState(Platform.OS !== 'android');
   const [readerReady, setReaderReady] = useState(isSimulatorMode());
   const [busy, setBusy] = useState(false);
+  const [customerLoading, setCustomerLoading] = useState(false);
+  const [productLoading, setProductLoading] = useState(false);
   const [statusText, setStatusText] = useState(
     isSimulatorMode()
       ? 'Simulator preview — card payments use a QR test checkout'
@@ -73,10 +67,13 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<StripeCustomer | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<StripeProduct | null>(null);
   const [lastAmountLabel, setLastAmountLabel] = useState('');
+
   const [customerSearch, setCustomerSearch] = useState('');
+  const [productSearch, setProductSearch] = useState('');
   const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const [productDropdownOpen, setProductDropdownOpen] = useState(false);
   const [showCreateCustomer, setShowCreateCustomer] = useState(false);
-  const customerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showCreateProduct, setShowCreateProduct] = useState(false);
 
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
@@ -88,6 +85,8 @@ export default function App() {
 
   const successTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const customerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const productSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     initialize,
@@ -180,6 +179,12 @@ export default function App() {
       if (paymentPollRef.current) {
         clearInterval(paymentPollRef.current);
       }
+      if (customerSearchTimer.current) {
+        clearTimeout(customerSearchTimer.current);
+      }
+      if (productSearchTimer.current) {
+        clearTimeout(productSearchTimer.current);
+      }
     };
   }, []);
 
@@ -197,8 +202,11 @@ export default function App() {
     setSelectedCustomer(null);
     setSelectedProduct(null);
     setCustomerSearch('');
+    setProductSearch('');
     setCustomerDropdownOpen(false);
+    setProductDropdownOpen(false);
     setShowCreateCustomer(false);
+    setShowCreateProduct(false);
     setNewCustomerName('');
     setNewCustomerEmail('');
     setNewProductName('');
@@ -207,19 +215,31 @@ export default function App() {
       clearTimeout(successTimeout.current);
       successTimeout.current = null;
     }
-    setScreen('customer-select');
+    setScreen('checkout');
     setBusy(false);
   };
 
   const loadCustomers = async (query = '') => {
-    setBusy(true);
+    setCustomerLoading(true);
     try {
       setCustomers(await listCustomers(query));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not load customers';
       Alert.alert('Error', `${message}\n\nBackend: ${getApiBaseUrl()}`);
     } finally {
-      setBusy(false);
+      setCustomerLoading(false);
+    }
+  };
+
+  const loadProducts = async (query = '') => {
+    setProductLoading(true);
+    try {
+      setProducts(await listProducts(query));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not load products';
+      Alert.alert('Error', message);
+    } finally {
+      setProductLoading(false);
     }
   };
 
@@ -227,6 +247,7 @@ export default function App() {
     setCustomerSearch(value);
     setSelectedCustomer(null);
     setCustomerDropdownOpen(true);
+    setProductDropdownOpen(false);
     if (customerSearchTimer.current) {
       clearTimeout(customerSearchTimer.current);
     }
@@ -235,35 +256,23 @@ export default function App() {
     }, 300);
   };
 
-  const loadProducts = async () => {
-    setBusy(true);
-    try {
-      setProducts(await listProducts());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not load products';
-      Alert.alert('Error', message);
-    } finally {
-      setBusy(false);
+  const onProductSearchChange = (value: string) => {
+    setProductSearch(value);
+    setSelectedProduct(null);
+    setProductDropdownOpen(true);
+    setCustomerDropdownOpen(false);
+    if (productSearchTimer.current) {
+      clearTimeout(productSearchTimer.current);
     }
+    productSearchTimer.current = setTimeout(() => {
+      loadProducts(value);
+    }, 300);
   };
 
   useEffect(() => {
-    if (screen === 'customer-select') {
+    if (screen === 'checkout') {
       loadCustomers(customerSearch);
-    }
-  }, [screen]);
-
-  useEffect(() => {
-    return () => {
-      if (customerSearchTimer.current) {
-        clearTimeout(customerSearchTimer.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (screen === 'product-select') {
-      loadProducts();
+      loadProducts(productSearch);
     }
   }, [screen]);
 
@@ -299,7 +308,6 @@ export default function App() {
       setShowCreateCustomer(false);
       setNewCustomerName('');
       setNewCustomerEmail('');
-      setScreen('product-select');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not create customer');
     } finally {
@@ -317,7 +325,15 @@ export default function App() {
     try {
       const product = await createProduct({ name: newProductName.trim(), unitAmount });
       setSelectedProduct(product);
-      setScreen('review');
+      setProductSearch(
+        product.unitAmount != null
+          ? `${product.name} · ${formatMoney(product.unitAmount, product.currency)}`
+          : product.name,
+      );
+      setProductDropdownOpen(false);
+      setShowCreateProduct(false);
+      setNewProductName('');
+      setNewProductAmount('');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not create product');
     } finally {
@@ -395,7 +411,7 @@ export default function App() {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment failed';
       if (message.toLowerCase().includes('cancel')) {
-        setScreen('review');
+        setScreen('checkout');
         return;
       }
       Alert.alert('Payment unsuccessful', message);
@@ -408,12 +424,17 @@ export default function App() {
 
   const handleCancelPayment = async () => {
     await cancelCollectPaymentMethod();
-    setScreen('review');
+    setScreen('checkout');
   };
 
-  const renderCustomerSelect = () => (
+  const amountLabel =
+    selectedProduct?.unitAmount != null
+      ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
+      : '';
+
+  const renderCheckout = () => (
     <ScrollView contentContainerStyle={styles.scrollBody} keyboardShouldPersistTaps="handled">
-      <AppHeader subtitle="Select a customer" />
+      <AppHeader subtitle="Select customer and product" />
       {statusText ? <Text style={styles.statusText}>{statusText}</Text> : null}
 
       <Text style={styles.fieldLabel}>Customer</Text>
@@ -421,16 +442,18 @@ export default function App() {
         style={styles.input}
         value={customerSearch}
         onChangeText={onCustomerSearchChange}
-        onFocus={() => setCustomerDropdownOpen(true)}
+        onFocus={() => {
+          setCustomerDropdownOpen(true);
+          setProductDropdownOpen(false);
+        }}
         placeholder="Search by name or email"
         placeholderTextColor={theme.slate}
         autoCorrect={false}
         autoCapitalize="none"
       />
-
       {customerDropdownOpen ? (
         <View style={styles.dropdown}>
-          {busy ? (
+          {customerLoading ? (
             <ActivityIndicator style={styles.dropdownLoading} color={theme.primary} />
           ) : customers.length === 0 ? (
             <Text style={styles.dropdownEmpty}>No customers found</Text>
@@ -456,30 +479,19 @@ export default function App() {
           )}
         </View>
       ) : null}
-
       {selectedCustomer ? (
         <Text style={styles.selectedHint}>
           Selected: {selectedCustomer.name}
           {selectedCustomer.email ? ` (${selectedCustomer.email})` : ''}
         </Text>
       ) : null}
-
-      <View style={styles.buttonGroup}>
-        <Button
-          label="Continue"
-          onPress={() => setScreen('product-select')}
-          disabled={!selectedCustomer}
-        />
-        <Button
-          label={showCreateCustomer ? 'Hide create form' : 'Create new customer'}
-          onPress={() => setShowCreateCustomer((open) => !open)}
-          variant="secondary"
-        />
-      </View>
-
+      <Button
+        label={showCreateCustomer ? 'Hide create customer' : 'Create new customer'}
+        onPress={() => setShowCreateCustomer((open) => !open)}
+        variant="secondary"
+      />
       {showCreateCustomer ? (
         <View style={styles.createPanel}>
-          <Text style={styles.fieldLabel}>New customer</Text>
           <TextInput
             style={styles.input}
             value={newCustomerName}
@@ -504,110 +516,113 @@ export default function App() {
           />
         </View>
       ) : null}
-    </ScrollView>
-  );
 
-  const renderProductSelect = () => (
-    <ScrollView contentContainerStyle={styles.scrollBody}>
-      <AppHeader
-        subtitle={selectedCustomer ? `Customer: ${selectedCustomer.name}` : 'Select a product'}
-        compact
+      <View style={styles.sectionDivider} />
+
+      <Text style={styles.fieldLabel}>Product</Text>
+      <TextInput
+        style={styles.input}
+        value={productSearch}
+        onChangeText={onProductSearchChange}
+        onFocus={() => {
+          setProductDropdownOpen(true);
+          setCustomerDropdownOpen(false);
+        }}
+        placeholder="Search by product name"
+        placeholderTextColor={theme.slate}
+        autoCorrect={false}
+        autoCapitalize="none"
       />
-      {busy && products.length === 0 ? (
-        <ActivityIndicator size="large" color={theme.primary} />
-      ) : (
-        <View style={styles.list}>
-          {products.map((p) => (
-            <Pressable
-              key={p.id}
-              style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
-              onPress={() => {
-                setSelectedProduct(p);
-                setScreen('review');
-              }}
-            >
-              <Text style={styles.listItemTitle}>{p.name}</Text>
-              {p.unitAmount != null ? (
-                <Text style={styles.listItemDetail}>{formatMoney(p.unitAmount, p.currency)}</Text>
-              ) : null}
-            </Pressable>
-          ))}
+      {productDropdownOpen ? (
+        <View style={styles.dropdown}>
+          {productLoading ? (
+            <ActivityIndicator style={styles.dropdownLoading} color={theme.primary} />
+          ) : products.length === 0 ? (
+            <Text style={styles.dropdownEmpty}>No products found</Text>
+          ) : (
+            products.map((p) => (
+              <Pressable
+                key={p.id}
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  selectedProduct?.id === p.id && styles.dropdownItemSelected,
+                  pressed && styles.listItemPressed,
+                ]}
+                onPress={() => {
+                  setSelectedProduct(p);
+                  setProductSearch(
+                    p.unitAmount != null
+                      ? `${p.name} · ${formatMoney(p.unitAmount, p.currency)}`
+                      : p.name,
+                  );
+                  setProductDropdownOpen(false);
+                }}
+              >
+                <Text style={styles.listItemTitle}>{p.name}</Text>
+                {p.unitAmount != null ? (
+                  <Text style={styles.listItemDetail}>{formatMoney(p.unitAmount, p.currency)}</Text>
+                ) : null}
+              </Pressable>
+            ))
+          )}
         </View>
-      )}
-      <View style={styles.buttonGroup}>
-        <Button
-          label="Create new product"
-          onPress={() => setScreen('product-create')}
-          variant="secondary"
-        />
-        <Button label="Back" onPress={() => setScreen('customer-select')} variant="secondary" />
-        <Button label="Refresh list" onPress={loadProducts} loading={busy} disabled={busy} />
-      </View>
-    </ScrollView>
-  );
-
-  const renderProductCreate = () => (
-    <ScrollView contentContainerStyle={styles.scrollBody}>
-      <AppHeader subtitle="New product" compact />
-      <TextInput
-        style={styles.input}
-        value={newProductName}
-        onChangeText={setNewProductName}
-        placeholder="Product name"
-        placeholderTextColor={theme.slate}
+      ) : null}
+      {selectedProduct ? (
+        <Text style={styles.selectedHint}>
+          Selected: {selectedProduct.name}
+          {amountLabel ? ` — ${amountLabel}` : ''}
+        </Text>
+      ) : null}
+      <Button
+        label={showCreateProduct ? 'Hide create product' : 'Create new product'}
+        onPress={() => setShowCreateProduct((open) => !open)}
+        variant="secondary"
       />
-      <TextInput
-        style={styles.input}
-        value={newProductAmount}
-        onChangeText={setNewProductAmount}
-        placeholder="Price in AUD (e.g. 8.00)"
-        placeholderTextColor={theme.slate}
-        keyboardType="decimal-pad"
-      />
-      <View style={styles.buttonGroup}>
-        <Button label="Save product" onPress={handleCreateProduct} loading={busy} disabled={busy} />
-        <Button label="Back" onPress={() => setScreen('product-select')} variant="secondary" />
-      </View>
-    </ScrollView>
-  );
+      {showCreateProduct ? (
+        <View style={styles.createPanel}>
+          <TextInput
+            style={styles.input}
+            value={newProductName}
+            onChangeText={setNewProductName}
+            placeholder="Product name"
+            placeholderTextColor={theme.slate}
+          />
+          <TextInput
+            style={styles.input}
+            value={newProductAmount}
+            onChangeText={setNewProductAmount}
+            placeholder="Price in AUD (e.g. 8.00)"
+            placeholderTextColor={theme.slate}
+            keyboardType="decimal-pad"
+          />
+          <Button
+            label="Save product"
+            onPress={handleCreateProduct}
+            loading={busy}
+            disabled={busy}
+          />
+        </View>
+      ) : null}
 
-  const renderReview = () => {
-    const amountLabel =
-      selectedProduct?.unitAmount != null
-        ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
-        : '';
-    return (
-      <View style={styles.screenBody}>
-        <AppHeader subtitle="Review and pay" compact />
+      {selectedCustomer && selectedProduct ? (
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Customer</Text>
-          <Text style={styles.summaryValue}>{selectedCustomer?.name}</Text>
-          <Text style={styles.summaryLabel}>Product</Text>
-          <Text style={styles.summaryValue}>{selectedProduct?.name}</Text>
-          <Text style={styles.summaryLabel}>Amount</Text>
+          <Text style={styles.summaryLabel}>Ready to charge</Text>
+          <Text style={styles.summaryValue}>{selectedCustomer.name}</Text>
+          <Text style={styles.summaryValue}>{selectedProduct.name}</Text>
           <Text style={styles.summaryAmount}>{amountLabel}</Text>
         </View>
-        <View style={styles.buttonGroup}>
-          <Button
-            label="Collect payment"
-            onPress={handleCollectPayment}
-            disabled={!readerReady || busy}
-            loading={busy}
-          />
-          <Button
-            label="Change product"
-            onPress={() => setScreen('product-select')}
-            variant="secondary"
-          />
-          <Button
-            label="Change customer"
-            onPress={() => setScreen('customer-select')}
-            variant="secondary"
-          />
-        </View>
+      ) : null}
+
+      <View style={styles.buttonGroup}>
+        <Button
+          label="Collect payment"
+          onPress={handleCollectPayment}
+          disabled={!selectedCustomer || !selectedProduct || !readerReady || busy}
+          loading={busy}
+        />
       </View>
-    );
-  };
+    </ScrollView>
+  );
 
   const renderProcessing = () => (
     <View style={styles.screenBody}>
@@ -637,7 +652,7 @@ export default function App() {
       </View>
       <Text style={styles.title}>Payment unsuccessful</Text>
       <Text style={styles.subText}>Please try again or contact staff.</Text>
-      <Button label="Try again" onPress={() => setScreen('review')} />
+      <Button label="Try again" onPress={() => setScreen('checkout')} />
     </View>
   );
 
@@ -668,10 +683,7 @@ export default function App() {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.white} />
-      {screen === 'customer-select' && renderCustomerSelect()}
-      {screen === 'product-select' && renderProductSelect()}
-      {screen === 'product-create' && renderProductCreate()}
-      {screen === 'review' && renderReview()}
+      {screen === 'checkout' && renderCheckout()}
       {screen === 'processing' && renderProcessing()}
       {screen === 'payment-success' && renderPaymentSuccess()}
       {screen === 'payment-failed' && renderPaymentFailed()}
@@ -696,7 +708,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: 24,
     paddingVertical: 20,
-    gap: 16,
+    gap: 12,
   },
   buttonGroup: {
     width: '100%',
@@ -726,19 +738,6 @@ const styles = StyleSheet.create({
     color: theme.slate,
     textAlign: 'center',
   },
-  list: {
-    width: '100%',
-    gap: 10,
-  },
-  listItem: {
-    width: '100%',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(10, 37, 64, 0.12)',
-    backgroundColor: theme.white,
-  },
   listItemPressed: {
     backgroundColor: theme.primaryDim,
   },
@@ -767,11 +766,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: theme.slate,
-    marginBottom: -8,
+    marginBottom: -4,
+    marginTop: 4,
+  },
+  sectionDivider: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(10, 37, 64, 0.1)',
+    marginVertical: 8,
   },
   dropdown: {
     width: '100%',
-    maxHeight: 260,
+    maxHeight: 200,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(10, 37, 64, 0.15)',
@@ -804,8 +810,6 @@ const styles = StyleSheet.create({
   createPanel: {
     width: '100%',
     gap: 12,
-    marginTop: 8,
-    paddingTop: 8,
   },
   summaryCard: {
     width: '100%',
@@ -813,12 +817,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: theme.primaryDim,
     gap: 6,
+    marginTop: 8,
   },
   summaryLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: theme.slate,
-    marginTop: 8,
   },
   summaryValue: {
     fontSize: 17,
@@ -829,6 +833,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '700',
     color: theme.primary,
+    marginTop: 4,
   },
   iconCircle: {
     width: 88,

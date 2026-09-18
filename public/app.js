@@ -2,6 +2,7 @@ let currentPaymentIntentId = null;
 let pollInterval = null;
 let successTimeout = null;
 let customerSearchTimer = null;
+let productSearchTimer = null;
 
 let selectedCustomer = null;
 let selectedProduct = null;
@@ -40,28 +41,68 @@ function clearSuccessTimeout() {
   }
 }
 
-function updateCustomerSelectionUI() {
-  const hint = document.getElementById('customer-selected-hint');
-  const continueBtn = document.getElementById('btn-continue-customer');
+function updateCheckoutUI() {
+  const customerHint = document.getElementById('customer-selected-hint');
+  const productHint = document.getElementById('product-selected-hint');
+  const summary = document.getElementById('checkout-summary');
+  const collectBtn = document.getElementById('btn-collect-payment');
+
   if (selectedCustomer) {
-    hint.hidden = false;
-    hint.textContent = selectedCustomer.email
+    customerHint.hidden = false;
+    customerHint.textContent = selectedCustomer.email
       ? `Selected: ${selectedCustomer.name} (${selectedCustomer.email})`
       : `Selected: ${selectedCustomer.name}`;
-    continueBtn.disabled = false;
   } else {
-    hint.hidden = true;
-    hint.textContent = '';
-    continueBtn.disabled = true;
+    customerHint.hidden = true;
+  }
+
+  if (selectedProduct) {
+    const amount =
+      selectedProduct.unitAmount != null
+        ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
+        : '';
+    productHint.hidden = false;
+    productHint.textContent = amount
+      ? `Selected: ${selectedProduct.name} — ${amount}`
+      : `Selected: ${selectedProduct.name}`;
+  } else {
+    productHint.hidden = true;
+  }
+
+  if (selectedCustomer && selectedProduct) {
+    summary.hidden = false;
+    document.getElementById('summary-customer').textContent = selectedCustomer.name;
+    document.getElementById('summary-product').textContent = selectedProduct.name;
+    lastAmountLabel =
+      selectedProduct.unitAmount != null
+        ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
+        : '';
+    document.getElementById('summary-amount').textContent = lastAmountLabel;
+    collectBtn.disabled = false;
+  } else {
+    summary.hidden = true;
+    collectBtn.disabled = true;
   }
 }
 
 function selectCustomer(customer) {
   selectedCustomer = customer;
-  const search = document.getElementById('customer-search');
-  search.value = customer.email ? `${customer.name} · ${customer.email}` : customer.name;
+  document.getElementById('customer-search').value = customer.email
+    ? `${customer.name} · ${customer.email}`
+    : customer.name;
   document.getElementById('customer-dropdown').hidden = true;
-  updateCustomerSelectionUI();
+  updateCheckoutUI();
+}
+
+function selectProduct(product) {
+  selectedProduct = product;
+  const amount =
+    product.unitAmount != null ? formatMoney(product.unitAmount, product.currency) : '';
+  document.getElementById('product-search').value = amount
+    ? `${product.name} · ${amount}`
+    : product.name;
+  document.getElementById('product-dropdown').hidden = true;
+  updateCheckoutUI();
 }
 
 function resetCheckout() {
@@ -72,11 +113,15 @@ function resetCheckout() {
   selectedProduct = null;
   lastAmountLabel = '';
   document.getElementById('customer-search').value = '';
+  document.getElementById('product-search').value = '';
   document.getElementById('create-customer-panel').hidden = true;
+  document.getElementById('create-product-panel').hidden = true;
   document.getElementById('btn-toggle-create-customer').textContent = 'Create new customer';
-  updateCustomerSelectionUI();
-  showScreen('screen-customer-select');
+  document.getElementById('btn-toggle-create-product').textContent = 'Create new product';
+  updateCheckoutUI();
+  showScreen('screen-checkout');
   loadCustomers('');
+  loadProducts('');
 }
 
 async function loadCustomers(query = '') {
@@ -101,9 +146,7 @@ async function loadCustomers(query = '') {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'dropdown-item';
-      if (selectedCustomer?.id === customer.id) {
-        btn.classList.add('selected');
-      }
+      if (selectedCustomer?.id === customer.id) btn.classList.add('selected');
       btn.innerHTML = `<span class="list-item-title">${customer.name}</span>${
         customer.email ? `<span class="list-item-detail">${customer.email}</span>` : ''
       }`;
@@ -115,49 +158,40 @@ async function loadCustomers(query = '') {
   }
 }
 
-async function loadProducts() {
-  const list = document.getElementById('product-list');
-  list.innerHTML = '<p class="sub-text">Loading…</p>';
+async function loadProducts(query = '') {
+  const dropdown = document.getElementById('product-dropdown');
+  dropdown.hidden = false;
+  dropdown.innerHTML = '<p class="dropdown-empty">Loading…</p>';
   try {
-    const res = await fetch('/api/products');
+    const params = new URLSearchParams();
+    if (query.trim()) params.set('q', query.trim());
+    const qs = params.toString();
+    const res = await fetch(`/api/products${qs ? `?${qs}` : ''}`);
     const data = await res.json();
     if (!res.ok || data.error) {
       throw new Error(data.error || 'Failed to load products');
     }
     if (!data.products.length) {
-      list.innerHTML = '<p class="sub-text">No products yet. Create one to continue.</p>';
+      dropdown.innerHTML = '<p class="dropdown-empty">No products found</p>';
       return;
     }
-    list.innerHTML = '';
+    dropdown.innerHTML = '';
     data.products.forEach((product) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'list-item';
+      btn.className = 'dropdown-item';
+      if (selectedProduct?.id === product.id) btn.classList.add('selected');
       const priceLabel =
         product.unitAmount != null ? formatMoney(product.unitAmount, product.currency) : '';
       btn.innerHTML = `<span class="list-item-title">${product.name}</span>${
         priceLabel ? `<span class="list-item-detail">${priceLabel}</span>` : ''
       }`;
-      btn.addEventListener('click', () => {
-        selectedProduct = product;
-        updateReview();
-        showScreen('screen-review');
-      });
-      list.appendChild(btn);
+      btn.addEventListener('click', () => selectProduct(product));
+      dropdown.appendChild(btn);
     });
   } catch (err) {
-    list.innerHTML = `<p class="error-text">${err.message}</p>`;
+    dropdown.innerHTML = `<p class="error-text">${err.message}</p>`;
   }
-}
-
-function updateReview() {
-  document.getElementById('review-customer').textContent = selectedCustomer?.name || '';
-  document.getElementById('review-product').textContent = selectedProduct?.name || '';
-  lastAmountLabel =
-    selectedProduct?.unitAmount != null
-      ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
-      : '';
-  document.getElementById('review-amount').textContent = lastAmountLabel;
 }
 
 function parseDollarsToCents(value) {
@@ -190,10 +224,6 @@ async function saveCustomer() {
     document.getElementById('btn-toggle-create-customer').textContent = 'Create new customer';
     document.getElementById('customer-name').value = '';
     document.getElementById('customer-email').value = '';
-    document.getElementById('product-select-subtitle').textContent =
-      `Customer: ${selectedCustomer.name}`;
-    showScreen('screen-product-select');
-    loadProducts();
   } catch (err) {
     alert(err.message);
   }
@@ -216,9 +246,11 @@ async function saveProduct() {
     if (!res.ok || data.error) {
       throw new Error(data.error || 'Could not create product');
     }
-    selectedProduct = data.product;
-    updateReview();
-    showScreen('screen-review');
+    selectProduct(data.product);
+    document.getElementById('create-product-panel').hidden = true;
+    document.getElementById('btn-toggle-create-product').textContent = 'Create new product';
+    document.getElementById('product-name').value = '';
+    document.getElementById('product-amount').value = '';
   } catch (err) {
     alert(err.message);
   }
@@ -311,28 +343,36 @@ async function cancelPayment() {
     currentPaymentIntentId = null;
   }
 
-  showScreen('screen-review');
+  showScreen('screen-checkout');
 }
 
 const customerSearchInput = document.getElementById('customer-search');
+const productSearchInput = document.getElementById('product-search');
+
 customerSearchInput.addEventListener('focus', () => {
+  document.getElementById('product-dropdown').hidden = true;
   loadCustomers(customerSearchInput.value);
 });
 customerSearchInput.addEventListener('input', () => {
   selectedCustomer = null;
-  updateCustomerSelectionUI();
+  updateCheckoutUI();
   if (customerSearchTimer) clearTimeout(customerSearchTimer);
   customerSearchTimer = setTimeout(() => {
     loadCustomers(customerSearchInput.value);
   }, 300);
 });
 
-document.getElementById('btn-continue-customer').addEventListener('click', () => {
-  if (!selectedCustomer) return;
-  document.getElementById('product-select-subtitle').textContent =
-    `Customer: ${selectedCustomer.name}`;
-  showScreen('screen-product-select');
-  loadProducts();
+productSearchInput.addEventListener('focus', () => {
+  document.getElementById('customer-dropdown').hidden = true;
+  loadProducts(productSearchInput.value);
+});
+productSearchInput.addEventListener('input', () => {
+  selectedProduct = null;
+  updateCheckoutUI();
+  if (productSearchTimer) clearTimeout(productSearchTimer);
+  productSearchTimer = setTimeout(() => {
+    loadProducts(productSearchInput.value);
+  }, 300);
 });
 
 document.getElementById('btn-toggle-create-customer').addEventListener('click', () => {
@@ -340,7 +380,7 @@ document.getElementById('btn-toggle-create-customer').addEventListener('click', 
   const open = panel.hidden;
   panel.hidden = !open;
   document.getElementById('btn-toggle-create-customer').textContent = open
-    ? 'Hide create form'
+    ? 'Hide create customer'
     : 'Create new customer';
   if (open) {
     document.getElementById('customer-name').value = '';
@@ -348,36 +388,26 @@ document.getElementById('btn-toggle-create-customer').addEventListener('click', 
   }
 });
 
+document.getElementById('btn-toggle-create-product').addEventListener('click', () => {
+  const panel = document.getElementById('create-product-panel');
+  const open = panel.hidden;
+  panel.hidden = !open;
+  document.getElementById('btn-toggle-create-product').textContent = open
+    ? 'Hide create product'
+    : 'Create new product';
+  if (open) {
+    document.getElementById('product-name').value = '';
+    document.getElementById('product-amount').value = '';
+  }
+});
+
 document.getElementById('btn-save-customer').addEventListener('click', saveCustomer);
-
-document.getElementById('btn-new-product').addEventListener('click', () => {
-  document.getElementById('product-name').value = '';
-  document.getElementById('product-amount').value = '';
-  showScreen('screen-product-create');
-});
-document.getElementById('btn-refresh-products').addEventListener('click', loadProducts);
-document.getElementById('btn-product-back').addEventListener('click', () => {
-  showScreen('screen-customer-select');
-  loadCustomers(customerSearchInput.value);
-});
 document.getElementById('btn-save-product').addEventListener('click', saveProduct);
-document.getElementById('btn-product-create-back').addEventListener('click', () => {
-  showScreen('screen-product-select');
-});
-
 document.getElementById('btn-collect-payment').addEventListener('click', startPayment);
-document.getElementById('btn-review-change-product').addEventListener('click', () => {
-  showScreen('screen-product-select');
-  loadProducts();
-});
-document.getElementById('btn-review-change-customer').addEventListener('click', () => {
-  showScreen('screen-customer-select');
-  loadCustomers(customerSearchInput.value);
-});
-
 document.getElementById('btn-cancel-payment').addEventListener('click', cancelPayment);
 document.getElementById('btn-payment-done').addEventListener('click', resetCheckout);
-document.getElementById('btn-payment-retry').addEventListener('click', () => showScreen('screen-review'));
+document.getElementById('btn-payment-retry').addEventListener('click', () => showScreen('screen-checkout'));
 
-updateCustomerSelectionUI();
+updateCheckoutUI();
 loadCustomers('');
+loadProducts('');

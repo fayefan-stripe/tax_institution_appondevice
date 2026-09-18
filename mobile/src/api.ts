@@ -64,8 +64,15 @@ export async function createCustomer(input: {
   return data.customer;
 }
 
-export async function listProducts(): Promise<StripeProduct[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/products`, { headers: getApiHeaders() });
+export async function listProducts(query?: string): Promise<StripeProduct[]> {
+  const params = new URLSearchParams();
+  if (query?.trim()) {
+    params.set('q', query.trim());
+  }
+  const qs = params.toString();
+  const res = await fetch(`${getApiBaseUrl()}/api/products${qs ? `?${qs}` : ''}`, {
+    headers: getApiHeaders(),
+  });
   const data = await res.json();
   if (!res.ok || data.error) {
     throw new Error(data.error || 'Failed to load products');

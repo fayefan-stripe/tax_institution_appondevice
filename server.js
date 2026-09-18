@@ -163,21 +163,49 @@ app.post('/api/customers', async (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const products = await stripe.products.list({
-      limit,
-      active: true,
-      expand: ['data.default_price'],
-    });
-    const items = products.data
-      .map((product) => {
-        const price = product.default_price;
-        if (!price || typeof price === 'string' || !price.unit_amount) {
-          return null;
-        }
-        return mapProduct(product, price);
-      })
-      .filter(Boolean);
-    res.json({ products: items });
+    const q = String(req.query.q || '').trim();
+
+    const toItems = (products) =>
+      products
+        .map((product) => {
+          const price = product.default_price;
+          if (!price || typeof price === 'string' || !price.unit_amount) {
+            return null;
+          }
+          return mapProduct(product, price);
+        })
+        .filter(Boolean);
+
+    if (!q) {
+      const products = await stripe.products.list({
+        limit,
+        active: true,
+        expand: ['data.default_price'],
+      });
+      return res.json({ products: toItems(products.data) });
+    }
+
+    const sanitized = q.replace(/['\\]/g, '').slice(0, 100);
+    try {
+      const results = await stripe.products.search({
+        query: `active:'true' AND name~'${sanitized}'`,
+        limit,
+        expand: ['data.default_price'],
+      });
+      return res.json({ products: toItems(results.data) });
+    } catch (searchErr) {
+      console.warn('Product search unavailable, falling back to list:', searchErr.message);
+      const products = await stripe.products.list({
+        limit: 100,
+        active: true,
+        expand: ['data.default_price'],
+      });
+      const needle = q.toLowerCase();
+      const filtered = toItems(products.data)
+        .filter((p) => p.name.toLowerCase().includes(needle))
+        .slice(0, limit);
+      return res.json({ products: filtered });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
