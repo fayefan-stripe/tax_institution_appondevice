@@ -107,8 +107,40 @@ function mapProduct(product, price) {
 app.get('/api/customers', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 100);
-    const customers = await stripe.customers.list({ limit });
-    res.json({ customers: customers.data.filter((c) => !c.deleted).map(mapCustomer) });
+    const q = String(req.query.q || '').trim();
+
+    if (!q) {
+      const customers = await stripe.customers.list({ limit });
+      return res.json({
+        customers: customers.data.filter((c) => !c.deleted).map(mapCustomer),
+      });
+    }
+
+    // Prefer Stripe Search for name/email; fall back to list + local filter.
+    const sanitized = q.replace(/['\\]/g, '').slice(0, 100);
+    try {
+      const results = await stripe.customers.search({
+        query: `name~'${sanitized}' OR email~'${sanitized}'`,
+        limit,
+      });
+      return res.json({
+        customers: results.data.filter((c) => !c.deleted).map(mapCustomer),
+      });
+    } catch (searchErr) {
+      console.warn('Customer search unavailable, falling back to list:', searchErr.message);
+      const customers = await stripe.customers.list({ limit: 100 });
+      const needle = q.toLowerCase();
+      const filtered = customers.data
+        .filter((c) => !c.deleted)
+        .filter((c) => {
+          const name = (c.name || '').toLowerCase();
+          const email = (c.email || '').toLowerCase();
+          return name.includes(needle) || email.includes(needle);
+        })
+        .slice(0, limit)
+        .map(mapCustomer);
+      return res.json({ customers: filtered });
+    }
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

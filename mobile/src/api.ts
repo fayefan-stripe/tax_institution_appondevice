@@ -32,8 +32,15 @@ export function getApiHeaders(extra?: Record<string, string>): Record<string, st
   return headers;
 }
 
-export async function listCustomers(): Promise<StripeCustomer[]> {
-  const res = await fetch(`${getApiBaseUrl()}/api/customers`, { headers: getApiHeaders() });
+export async function listCustomers(query?: string): Promise<StripeCustomer[]> {
+  const params = new URLSearchParams();
+  if (query?.trim()) {
+    params.set('q', query.trim());
+  }
+  const qs = params.toString();
+  const res = await fetch(`${getApiBaseUrl()}/api/customers${qs ? `?${qs}` : ''}`, {
+    headers: getApiHeaders(),
+  });
   const data = await res.json();
   if (!res.ok || data.error) {
     throw new Error(data.error || 'Failed to load customers');

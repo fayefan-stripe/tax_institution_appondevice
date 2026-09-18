@@ -1,6 +1,7 @@
 let currentPaymentIntentId = null;
 let pollInterval = null;
 let successTimeout = null;
+let customerSearchTimer = null;
 
 let selectedCustomer = null;
 let selectedProduct = null;
@@ -39,6 +40,30 @@ function clearSuccessTimeout() {
   }
 }
 
+function updateCustomerSelectionUI() {
+  const hint = document.getElementById('customer-selected-hint');
+  const continueBtn = document.getElementById('btn-continue-customer');
+  if (selectedCustomer) {
+    hint.hidden = false;
+    hint.textContent = selectedCustomer.email
+      ? `Selected: ${selectedCustomer.name} (${selectedCustomer.email})`
+      : `Selected: ${selectedCustomer.name}`;
+    continueBtn.disabled = false;
+  } else {
+    hint.hidden = true;
+    hint.textContent = '';
+    continueBtn.disabled = true;
+  }
+}
+
+function selectCustomer(customer) {
+  selectedCustomer = customer;
+  const search = document.getElementById('customer-search');
+  search.value = customer.email ? `${customer.name} · ${customer.email}` : customer.name;
+  document.getElementById('customer-dropdown').hidden = true;
+  updateCustomerSelectionUI();
+}
+
 function resetCheckout() {
   stopPolling();
   clearSuccessTimeout();
@@ -46,42 +71,47 @@ function resetCheckout() {
   selectedCustomer = null;
   selectedProduct = null;
   lastAmountLabel = '';
+  document.getElementById('customer-search').value = '';
+  document.getElementById('create-customer-panel').hidden = true;
+  document.getElementById('btn-toggle-create-customer').textContent = 'Create new customer';
+  updateCustomerSelectionUI();
   showScreen('screen-customer-select');
-  loadCustomers();
+  loadCustomers('');
 }
 
-async function loadCustomers() {
-  const list = document.getElementById('customer-list');
-  list.innerHTML = '<p class="sub-text">Loading…</p>';
+async function loadCustomers(query = '') {
+  const dropdown = document.getElementById('customer-dropdown');
+  dropdown.hidden = false;
+  dropdown.innerHTML = '<p class="dropdown-empty">Loading…</p>';
   try {
-    const res = await fetch('/api/customers');
+    const params = new URLSearchParams();
+    if (query.trim()) params.set('q', query.trim());
+    const qs = params.toString();
+    const res = await fetch(`/api/customers${qs ? `?${qs}` : ''}`);
     const data = await res.json();
     if (!res.ok || data.error) {
       throw new Error(data.error || 'Failed to load customers');
     }
     if (!data.customers.length) {
-      list.innerHTML = '<p class="sub-text">No customers yet. Create one to continue.</p>';
+      dropdown.innerHTML = '<p class="dropdown-empty">No customers found</p>';
       return;
     }
-    list.innerHTML = '';
+    dropdown.innerHTML = '';
     data.customers.forEach((customer) => {
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'list-item';
+      btn.className = 'dropdown-item';
+      if (selectedCustomer?.id === customer.id) {
+        btn.classList.add('selected');
+      }
       btn.innerHTML = `<span class="list-item-title">${customer.name}</span>${
         customer.email ? `<span class="list-item-detail">${customer.email}</span>` : ''
       }`;
-      btn.addEventListener('click', () => {
-        selectedCustomer = customer;
-        document.getElementById('product-select-subtitle').textContent =
-          `Customer: ${customer.name}`;
-        showScreen('screen-product-select');
-        loadProducts();
-      });
-      list.appendChild(btn);
+      btn.addEventListener('click', () => selectCustomer(customer));
+      dropdown.appendChild(btn);
     });
   } catch (err) {
-    list.innerHTML = `<p class="error-text">${err.message}</p>`;
+    dropdown.innerHTML = `<p class="error-text">${err.message}</p>`;
   }
 }
 
@@ -155,7 +185,11 @@ async function saveCustomer() {
     if (!res.ok || data.error) {
       throw new Error(data.error || 'Could not create customer');
     }
-    selectedCustomer = data.customer;
+    selectCustomer(data.customer);
+    document.getElementById('create-customer-panel').hidden = true;
+    document.getElementById('btn-toggle-create-customer').textContent = 'Create new customer';
+    document.getElementById('customer-name').value = '';
+    document.getElementById('customer-email').value = '';
     document.getElementById('product-select-subtitle').textContent =
       `Customer: ${selectedCustomer.name}`;
     showScreen('screen-product-select');
@@ -280,16 +314,41 @@ async function cancelPayment() {
   showScreen('screen-review');
 }
 
-document.getElementById('btn-new-customer').addEventListener('click', () => {
-  document.getElementById('customer-name').value = '';
-  document.getElementById('customer-email').value = '';
-  showScreen('screen-customer-create');
+const customerSearchInput = document.getElementById('customer-search');
+customerSearchInput.addEventListener('focus', () => {
+  loadCustomers(customerSearchInput.value);
 });
-document.getElementById('btn-refresh-customers').addEventListener('click', loadCustomers);
+customerSearchInput.addEventListener('input', () => {
+  selectedCustomer = null;
+  updateCustomerSelectionUI();
+  if (customerSearchTimer) clearTimeout(customerSearchTimer);
+  customerSearchTimer = setTimeout(() => {
+    loadCustomers(customerSearchInput.value);
+  }, 300);
+});
+
+document.getElementById('btn-continue-customer').addEventListener('click', () => {
+  if (!selectedCustomer) return;
+  document.getElementById('product-select-subtitle').textContent =
+    `Customer: ${selectedCustomer.name}`;
+  showScreen('screen-product-select');
+  loadProducts();
+});
+
+document.getElementById('btn-toggle-create-customer').addEventListener('click', () => {
+  const panel = document.getElementById('create-customer-panel');
+  const open = panel.hidden;
+  panel.hidden = !open;
+  document.getElementById('btn-toggle-create-customer').textContent = open
+    ? 'Hide create form'
+    : 'Create new customer';
+  if (open) {
+    document.getElementById('customer-name').value = '';
+    document.getElementById('customer-email').value = '';
+  }
+});
+
 document.getElementById('btn-save-customer').addEventListener('click', saveCustomer);
-document.getElementById('btn-customer-create-back').addEventListener('click', () => {
-  showScreen('screen-customer-select');
-});
 
 document.getElementById('btn-new-product').addEventListener('click', () => {
   document.getElementById('product-name').value = '';
@@ -299,7 +358,7 @@ document.getElementById('btn-new-product').addEventListener('click', () => {
 document.getElementById('btn-refresh-products').addEventListener('click', loadProducts);
 document.getElementById('btn-product-back').addEventListener('click', () => {
   showScreen('screen-customer-select');
-  loadCustomers();
+  loadCustomers(customerSearchInput.value);
 });
 document.getElementById('btn-save-product').addEventListener('click', saveProduct);
 document.getElementById('btn-product-create-back').addEventListener('click', () => {
@@ -313,11 +372,12 @@ document.getElementById('btn-review-change-product').addEventListener('click', (
 });
 document.getElementById('btn-review-change-customer').addEventListener('click', () => {
   showScreen('screen-customer-select');
-  loadCustomers();
+  loadCustomers(customerSearchInput.value);
 });
 
 document.getElementById('btn-cancel-payment').addEventListener('click', cancelPayment);
 document.getElementById('btn-payment-done').addEventListener('click', resetCheckout);
 document.getElementById('btn-payment-retry').addEventListener('click', () => showScreen('screen-review'));
 
-loadCustomers();
+updateCustomerSelectionUI();
+loadCustomers('');

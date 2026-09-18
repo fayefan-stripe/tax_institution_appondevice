@@ -37,7 +37,6 @@ import { theme } from './src/theme';
 
 type Screen =
   | 'customer-select'
-  | 'customer-create'
   | 'product-select'
   | 'product-create'
   | 'review'
@@ -74,6 +73,10 @@ export default function App() {
   const [selectedCustomer, setSelectedCustomer] = useState<StripeCustomer | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<StripeProduct | null>(null);
   const [lastAmountLabel, setLastAmountLabel] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerDropdownOpen, setCustomerDropdownOpen] = useState(false);
+  const [showCreateCustomer, setShowCreateCustomer] = useState(false);
+  const customerSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerEmail, setNewCustomerEmail] = useState('');
@@ -193,6 +196,9 @@ export default function App() {
     setPayError(null);
     setSelectedCustomer(null);
     setSelectedProduct(null);
+    setCustomerSearch('');
+    setCustomerDropdownOpen(false);
+    setShowCreateCustomer(false);
     setNewCustomerName('');
     setNewCustomerEmail('');
     setNewProductName('');
@@ -205,16 +211,28 @@ export default function App() {
     setBusy(false);
   };
 
-  const loadCustomers = async () => {
+  const loadCustomers = async (query = '') => {
     setBusy(true);
     try {
-      setCustomers(await listCustomers());
+      setCustomers(await listCustomers(query));
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not load customers';
       Alert.alert('Error', `${message}\n\nBackend: ${getApiBaseUrl()}`);
     } finally {
       setBusy(false);
     }
+  };
+
+  const onCustomerSearchChange = (value: string) => {
+    setCustomerSearch(value);
+    setSelectedCustomer(null);
+    setCustomerDropdownOpen(true);
+    if (customerSearchTimer.current) {
+      clearTimeout(customerSearchTimer.current);
+    }
+    customerSearchTimer.current = setTimeout(() => {
+      loadCustomers(value);
+    }, 300);
   };
 
   const loadProducts = async () => {
@@ -231,9 +249,17 @@ export default function App() {
 
   useEffect(() => {
     if (screen === 'customer-select') {
-      loadCustomers();
+      loadCustomers(customerSearch);
     }
   }, [screen]);
+
+  useEffect(() => {
+    return () => {
+      if (customerSearchTimer.current) {
+        clearTimeout(customerSearchTimer.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (screen === 'product-select') {
@@ -268,6 +294,11 @@ export default function App() {
         email: newCustomerEmail.trim() || undefined,
       });
       setSelectedCustomer(customer);
+      setCustomerSearch(customer.email ? `${customer.name} · ${customer.email}` : customer.name);
+      setCustomerDropdownOpen(false);
+      setShowCreateCustomer(false);
+      setNewCustomerName('');
+      setNewCustomerEmail('');
       setScreen('product-select');
     } catch (err) {
       Alert.alert('Error', err instanceof Error ? err.message : 'Could not create customer');
@@ -381,66 +412,98 @@ export default function App() {
   };
 
   const renderCustomerSelect = () => (
-    <ScrollView contentContainerStyle={styles.scrollBody}>
+    <ScrollView contentContainerStyle={styles.scrollBody} keyboardShouldPersistTaps="handled">
       <AppHeader subtitle="Select a customer" />
       {statusText ? <Text style={styles.statusText}>{statusText}</Text> : null}
-      {busy && customers.length === 0 ? (
-        <ActivityIndicator size="large" color={theme.primary} />
-      ) : (
-        <View style={styles.list}>
-          {customers.map((c) => (
-            <Pressable
-              key={c.id}
-              style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
-              onPress={() => {
-                setSelectedCustomer(c);
-                setScreen('product-select');
-              }}
-            >
-              <Text style={styles.listItemTitle}>{c.name}</Text>
-              {c.email ? <Text style={styles.listItemDetail}>{c.email}</Text> : null}
-            </Pressable>
-          ))}
-        </View>
-      )}
-      <View style={styles.buttonGroup}>
-        <Button
-          label="Create new customer"
-          onPress={() => setScreen('customer-create')}
-          variant="secondary"
-        />
-        <Button label="Refresh list" onPress={loadCustomers} loading={busy} disabled={busy} />
-      </View>
-    </ScrollView>
-  );
 
-  const renderCustomerCreate = () => (
-    <ScrollView contentContainerStyle={styles.scrollBody}>
-      <AppHeader subtitle="New customer" compact />
+      <Text style={styles.fieldLabel}>Customer</Text>
       <TextInput
         style={styles.input}
-        value={newCustomerName}
-        onChangeText={setNewCustomerName}
-        placeholder="Full name"
+        value={customerSearch}
+        onChangeText={onCustomerSearchChange}
+        onFocus={() => setCustomerDropdownOpen(true)}
+        placeholder="Search by name or email"
         placeholderTextColor={theme.slate}
-      />
-      <TextInput
-        style={styles.input}
-        value={newCustomerEmail}
-        onChangeText={setNewCustomerEmail}
-        placeholder="Email (optional)"
-        placeholderTextColor={theme.slate}
-        keyboardType="email-address"
+        autoCorrect={false}
         autoCapitalize="none"
       />
+
+      {customerDropdownOpen ? (
+        <View style={styles.dropdown}>
+          {busy ? (
+            <ActivityIndicator style={styles.dropdownLoading} color={theme.primary} />
+          ) : customers.length === 0 ? (
+            <Text style={styles.dropdownEmpty}>No customers found</Text>
+          ) : (
+            customers.map((c) => (
+              <Pressable
+                key={c.id}
+                style={({ pressed }) => [
+                  styles.dropdownItem,
+                  selectedCustomer?.id === c.id && styles.dropdownItemSelected,
+                  pressed && styles.listItemPressed,
+                ]}
+                onPress={() => {
+                  setSelectedCustomer(c);
+                  setCustomerSearch(c.email ? `${c.name} · ${c.email}` : c.name);
+                  setCustomerDropdownOpen(false);
+                }}
+              >
+                <Text style={styles.listItemTitle}>{c.name}</Text>
+                {c.email ? <Text style={styles.listItemDetail}>{c.email}</Text> : null}
+              </Pressable>
+            ))
+          )}
+        </View>
+      ) : null}
+
+      {selectedCustomer ? (
+        <Text style={styles.selectedHint}>
+          Selected: {selectedCustomer.name}
+          {selectedCustomer.email ? ` (${selectedCustomer.email})` : ''}
+        </Text>
+      ) : null}
+
       <View style={styles.buttonGroup}>
-        <Button label="Save customer" onPress={handleCreateCustomer} loading={busy} disabled={busy} />
         <Button
-          label="Back"
-          onPress={() => setScreen('customer-select')}
+          label="Continue"
+          onPress={() => setScreen('product-select')}
+          disabled={!selectedCustomer}
+        />
+        <Button
+          label={showCreateCustomer ? 'Hide create form' : 'Create new customer'}
+          onPress={() => setShowCreateCustomer((open) => !open)}
           variant="secondary"
         />
       </View>
+
+      {showCreateCustomer ? (
+        <View style={styles.createPanel}>
+          <Text style={styles.fieldLabel}>New customer</Text>
+          <TextInput
+            style={styles.input}
+            value={newCustomerName}
+            onChangeText={setNewCustomerName}
+            placeholder="Full name"
+            placeholderTextColor={theme.slate}
+          />
+          <TextInput
+            style={styles.input}
+            value={newCustomerEmail}
+            onChangeText={setNewCustomerEmail}
+            placeholder="Email (optional)"
+            placeholderTextColor={theme.slate}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <Button
+            label="Save customer"
+            onPress={handleCreateCustomer}
+            loading={busy}
+            disabled={busy}
+          />
+        </View>
+      ) : null}
     </ScrollView>
   );
 
@@ -606,7 +669,6 @@ export default function App() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.white} />
       {screen === 'customer-select' && renderCustomerSelect()}
-      {screen === 'customer-create' && renderCustomerCreate()}
       {screen === 'product-select' && renderProductSelect()}
       {screen === 'product-create' && renderProductCreate()}
       {screen === 'review' && renderReview()}
@@ -699,6 +761,51 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     fontSize: 16,
     color: theme.navy,
+  },
+  fieldLabel: {
+    alignSelf: 'flex-start',
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.slate,
+    marginBottom: -8,
+  },
+  dropdown: {
+    width: '100%',
+    maxHeight: 260,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 37, 64, 0.15)',
+    backgroundColor: theme.white,
+    overflow: 'hidden',
+  },
+  dropdownItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(10, 37, 64, 0.08)',
+  },
+  dropdownItemSelected: {
+    backgroundColor: theme.primaryDim,
+  },
+  dropdownEmpty: {
+    padding: 16,
+    textAlign: 'center',
+    color: theme.slate,
+  },
+  dropdownLoading: {
+    padding: 16,
+  },
+  selectedHint: {
+    alignSelf: 'flex-start',
+    fontSize: 14,
+    fontWeight: '500',
+    color: theme.primary,
+  },
+  createPanel: {
+    width: '100%',
+    gap: 12,
+    marginTop: 8,
+    paddingTop: 8,
   },
   summaryCard: {
     width: '100%',

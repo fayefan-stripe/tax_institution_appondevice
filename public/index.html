@@ -15,21 +15,27 @@
     <div id="screen-customer-select" class="screen active">
       <h1 class="app-title">Tax Institution</h1>
       <p class="sub-text">Select a customer</p>
-      <div id="customer-list" class="item-list"></div>
-      <div class="button-group">
-        <button id="btn-new-customer" class="btn btn-secondary">Create new customer</button>
-        <button id="btn-refresh-customers" class="btn btn-secondary">Refresh</button>
+      <label class="field-label" for="customer-search">Customer</label>
+      <div class="dropdown-wrap">
+        <input
+          id="customer-search"
+          type="text"
+          placeholder="Search by name or email"
+          autocomplete="off"
+          autocorrect="off"
+        >
+        <div id="customer-dropdown" class="dropdown-panel" hidden></div>
       </div>
-    </div>
-
-    <div id="screen-customer-create" class="screen">
-      <h1 class="app-title">Tax Institution</h1>
-      <h2>New customer</h2>
-      <input id="customer-name" type="text" placeholder="Full name" autocomplete="name">
-      <input id="customer-email" type="email" placeholder="Email (optional)" autocomplete="email">
+      <p id="customer-selected-hint" class="selected-hint" hidden></p>
       <div class="button-group">
+        <button id="btn-continue-customer" class="btn btn-primary" disabled>Continue</button>
+        <button id="btn-toggle-create-customer" class="btn btn-secondary">Create new customer</button>
+      </div>
+      <div id="create-customer-panel" class="create-panel" hidden>
+        <label class="field-label" for="customer-name">New customer</label>
+        <input id="customer-name" type="text" placeholder="Full name" autocomplete="name">
+        <input id="customer-email" type="email" placeholder="Email (optional)" autocomplete="email">
         <button id="btn-save-customer" class="btn btn-primary">Save customer</button>
-        <button id="btn-customer-create-back" class="btn btn-secondary">Back</button>
       </div>
     </div>
 
