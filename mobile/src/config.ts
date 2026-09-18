@@ -8,7 +8,7 @@ export const APP_TITLE = 'Tax Institution';
  * Public backend URL — production deployment.
  * Leave empty to fall back to BACKEND_HOST_LAN (local Wi‑Fi dev only).
  */
-export const API_BASE_URL = '';
+export const API_BASE_URL = 'https://tax-institution-appondevice.vercelapp.stripe.dev';
 
 // Your laptop's Wi-Fi IP — fallback when API_BASE_URL is empty (same network as S710).
 // Find it with: ipconfig getifaddr en0
