@@ -44,9 +44,19 @@ function isValidAdminPin(pin) {
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DEFAULT_CURRENCY = 'aud';
+const publicDir = path.join(__dirname, 'public');
 
 app.use(express.json());
-app.use(express.static('public'));
+// Absolute path so static assets resolve correctly on Vercel (cwd may not include public/).
+app.use(express.static(publicDir));
+
+app.get(['/', '/index.html'], (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+
+app.get('/simulator-pay.html', (req, res) => {
+  res.sendFile(path.join(publicDir, 'simulator-pay.html'));
+});
 
 async function resolveCheckout({ customerId, priceId }) {
   if (!customerId || !priceId) {
