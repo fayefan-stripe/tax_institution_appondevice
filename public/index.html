@@ -3,82 +3,95 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Social Booth</title>
+  <title>Tax Institution — Terminal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main id="app">
 
-    <!-- Home -->
-    <div id="screen-home" class="screen active">
-      <img src="logo.png" alt="Social Booth" class="logo">
+    <div id="screen-customer-select" class="screen active">
+      <h1 class="app-title">Tax Institution</h1>
+      <p class="sub-text">Select a customer</p>
+      <div id="customer-list" class="item-list"></div>
       <div class="button-group">
-        <button id="btn-pay-now" class="btn btn-primary">Pay Now</button>
-        <button id="btn-pay-promo" class="btn btn-secondary">Pay with Promo</button>
+        <button id="btn-new-customer" class="btn btn-secondary">Create new customer</button>
+        <button id="btn-refresh-customers" class="btn btn-secondary">Refresh</button>
       </div>
     </div>
 
-    <!-- Processing -->
+    <div id="screen-customer-create" class="screen">
+      <h1 class="app-title">Tax Institution</h1>
+      <h2>New customer</h2>
+      <input id="customer-name" type="text" placeholder="Full name" autocomplete="name">
+      <input id="customer-email" type="email" placeholder="Email (optional)" autocomplete="email">
+      <div class="button-group">
+        <button id="btn-save-customer" class="btn btn-primary">Save customer</button>
+        <button id="btn-customer-create-back" class="btn btn-secondary">Back</button>
+      </div>
+    </div>
+
+    <div id="screen-product-select" class="screen">
+      <h1 class="app-title">Tax Institution</h1>
+      <p id="product-select-subtitle" class="sub-text">Select a product</p>
+      <div id="product-list" class="item-list"></div>
+      <div class="button-group">
+        <button id="btn-new-product" class="btn btn-secondary">Create new product</button>
+        <button id="btn-product-back" class="btn btn-secondary">Change customer</button>
+        <button id="btn-refresh-products" class="btn btn-secondary">Refresh</button>
+      </div>
+    </div>
+
+    <div id="screen-product-create" class="screen">
+      <h1 class="app-title">Tax Institution</h1>
+      <h2>New product</h2>
+      <input id="product-name" type="text" placeholder="Product name">
+      <input id="product-amount" type="text" inputmode="decimal" placeholder="Price in AUD (e.g. 8.00)">
+      <div class="button-group">
+        <button id="btn-save-product" class="btn btn-primary">Save product</button>
+        <button id="btn-product-create-back" class="btn btn-secondary">Back</button>
+      </div>
+    </div>
+
+    <div id="screen-review" class="screen">
+      <h1 class="app-title">Tax Institution</h1>
+      <h2>Review and pay</h2>
+      <div class="summary-card">
+        <p class="summary-label">Customer</p>
+        <p id="review-customer" class="summary-value"></p>
+        <p class="summary-label">Product</p>
+        <p id="review-product" class="summary-value"></p>
+        <p class="summary-label">Amount</p>
+        <p id="review-amount" class="summary-amount"></p>
+      </div>
+      <div class="button-group">
+        <button id="btn-collect-payment" class="btn btn-primary">Collect payment on reader</button>
+        <button id="btn-review-change-product" class="btn btn-secondary">Change product</button>
+        <button id="btn-review-change-customer" class="btn btn-secondary">Change customer</button>
+      </div>
+    </div>
+
     <div id="screen-processing" class="screen">
-      <img src="logo.png" alt="Social Booth" class="logo logo-small">
       <div class="spinner"></div>
       <h2>Waiting for card…</h2>
       <p class="sub-text">Please tap, insert, or swipe on the reader.</p>
       <button id="btn-cancel-payment" class="btn btn-secondary">Cancel</button>
     </div>
 
-    <!-- Payment Success -->
     <div id="screen-payment-success" class="screen">
       <div class="icon icon-success">✓</div>
-      <h2>Payment successful!</h2>
-      <p class="sub-text amount">$8.00 AUD</p>
+      <h2>Payment successful</h2>
+      <p id="success-amount" class="sub-text amount"></p>
       <button id="btn-payment-done" class="btn btn-primary">Done</button>
     </div>
 
-    <!-- Payment Failed -->
     <div id="screen-payment-failed" class="screen">
       <div class="icon icon-error">✗</div>
       <h2>Payment unsuccessful</h2>
       <p class="sub-text">Please try again or contact staff.</p>
-      <button id="btn-payment-retry" class="btn btn-primary">Try Again</button>
-    </div>
-
-    <!-- Promo Entry -->
-    <div id="screen-promo-entry" class="screen">
-      <img src="logo.png" alt="Social Booth" class="logo logo-small">
-      <h2>Enter Promo Code</h2>
-      <input
-        id="promo-input"
-        type="text"
-        placeholder="e.g. DEMO2026"
-        autocomplete="off"
-        autocorrect="off"
-        autocapitalize="characters"
-      >
-      <div class="button-group">
-        <button id="btn-validate-promo" class="btn btn-primary">
-          <span id="validate-label">Validate</span>
-          <span id="validate-spinner" class="btn-spinner hidden"></span>
-        </button>
-        <button id="btn-promo-back" class="btn btn-secondary">Back</button>
-      </div>
-    </div>
-
-    <!-- Promo Success -->
-    <div id="screen-promo-success" class="screen">
-      <div class="icon icon-success">✓</div>
-      <h2>Promo code accepted!</h2>
-      <button id="btn-promo-done" class="btn btn-primary">Done</button>
-    </div>
-
-    <!-- Promo Failed -->
-    <div id="screen-promo-failed" class="screen">
-      <div class="icon icon-error">✗</div>
-      <h2 id="promo-failed-message">Invalid promo code. Please try again.</h2>
-      <button id="btn-promo-retry" class="btn btn-primary">Try Again</button>
+      <button id="btn-payment-retry" class="btn btn-primary">Try again</button>
     </div>
 
   </main>

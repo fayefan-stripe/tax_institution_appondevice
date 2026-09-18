@@ -2,17 +2,19 @@ import { isAndroidEmulator } from './device';
 
 export const BACKEND_PORT = 3000;
 
+export const APP_TITLE = 'Tax Institution';
+
 /**
- * Public backend URL — production Vercel deployment.
+ * Public backend URL — production deployment.
  * Leave empty to fall back to BACKEND_HOST_LAN (local Wi‑Fi dev only).
  */
-export const API_BASE_URL = 'https://social-booth-app-on-device.vercelapp.stripe.dev';
+export const API_BASE_URL = '';
 
 // Your laptop's Wi-Fi IP — fallback when API_BASE_URL is empty (same network as S710).
 // Find it with: ipconfig getifaddr en0
 export const BACKEND_HOST_LAN = '192.168.141.230';
 
-export const PAYMENT_AMOUNT_LABEL = '$8.00 AUD';
+export const DEFAULT_CURRENCY = 'aud';
 
 function normalizeBaseUrl(url: string): string {
   return url.replace(/\/$/, '');
@@ -40,4 +42,16 @@ export function getPublicPayBaseUrl(): string {
 /** Skip Stripe reader discovery on emulator only; real S710 always connects. */
 export function isSimulatorMode(): boolean {
   return isAndroidEmulator();
+}
+
+export function formatMoney(amountCents: number, currency = DEFAULT_CURRENCY): string {
+  const amount = amountCents / 100;
+  try {
+    return new Intl.NumberFormat('en-AU', {
+      style: 'currency',
+      currency: currency.toUpperCase(),
+    }).format(amount);
+  } catch {
+    return `$${amount.toFixed(2)} ${currency.toUpperCase()}`;
+  }
 }

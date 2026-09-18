@@ -1,7 +1,19 @@
 import { getApiBaseUrl, getPublicPayBaseUrl } from './config';
 import { VERCEL_PROTECTION_BYPASS } from './secrets';
 
-export type PromoReason = 'invalid_code' | 'not_yet_active' | 'expired';
+export type StripeCustomer = {
+  id: string;
+  name: string;
+  email: string | null;
+};
+
+export type StripeProduct = {
+  id: string;
+  name: string;
+  priceId: string | null;
+  unitAmount: number | null;
+  currency: string;
+};
 
 function usesVercelBackend(): boolean {
   const base = getApiBaseUrl();
@@ -20,32 +32,104 @@ export function getApiHeaders(extra?: Record<string, string>): Record<string, st
   return headers;
 }
 
-export async function createPaymentIntentClientSecret(): Promise<string> {
+export async function listCustomers(): Promise<StripeCustomer[]> {
+  const res = await fetch(`${getApiBaseUrl()}/api/customers`, { headers: getApiHeaders() });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || 'Failed to load customers');
+  }
+  return data.customers;
+}
+
+export async function createCustomer(input: {
+  name: string;
+  email?: string;
+}): Promise<StripeCustomer> {
+  const res = await fetch(`${getApiBaseUrl()}/api/customers`, {
+    method: 'POST',
+    headers: getApiHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || 'Failed to create customer');
+  }
+  return data.customer;
+}
+
+export async function listProducts(): Promise<StripeProduct[]> {
+  const res = await fetch(`${getApiBaseUrl()}/api/products`, { headers: getApiHeaders() });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || 'Failed to load products');
+  }
+  return data.products;
+}
+
+export async function createProduct(input: {
+  name: string;
+  unitAmount: number;
+  currency?: string;
+}): Promise<StripeProduct> {
+  const res = await fetch(`${getApiBaseUrl()}/api/products`, {
+    method: 'POST',
+    headers: getApiHeaders(),
+    body: JSON.stringify(input),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || 'Failed to create product');
+  }
+  return data.product;
+}
+
+export type CheckoutSelection = {
+  customerId: string;
+  priceId: string;
+};
+
+export async function createPaymentIntentClientSecret(
+  checkout: CheckoutSelection,
+): Promise<{ clientSecret: string; amount: number; currency: string }> {
   const res = await fetch(`${getApiBaseUrl()}/api/create-payment-intent`, {
     method: 'POST',
     headers: getApiHeaders(),
+    body: JSON.stringify(checkout),
   });
   const data = await res.json();
   if (!res.ok || data.error) {
     throw new Error(data.error || 'Failed to create payment intent');
   }
-  return data.clientSecret;
+  return {
+    clientSecret: data.clientSecret,
+    amount: data.amount,
+    currency: data.currency,
+  };
 }
 
-export async function createSimulatorPaymentIntent(): Promise<{
+export async function createSimulatorPaymentIntent(
+  checkout: CheckoutSelection,
+): Promise<{
   paymentIntentId: string;
   payUrl: string;
+  amount: number;
+  currency: string;
 }> {
   const res = await fetch(`${getApiBaseUrl()}/api/create-simulator-payment-intent`, {
     method: 'POST',
     headers: getApiHeaders(),
-    body: JSON.stringify({ payBaseUrl: getPublicPayBaseUrl() }),
+    body: JSON.stringify({ ...checkout, payBaseUrl: getPublicPayBaseUrl() }),
   });
   const data = await res.json();
   if (!res.ok || data.error) {
     throw new Error(data.error || 'Failed to create payment intent');
   }
-  return { paymentIntentId: data.paymentIntentId, payUrl: data.payUrl };
+  return {
+    paymentIntentId: data.paymentIntentId,
+    payUrl: data.payUrl,
+    amount: data.amount,
+    currency: data.currency,
+  };
 }
 
 export async function getSimulatorPaymentStatus(
@@ -72,21 +156,6 @@ export async function capturePaymentIntent(paymentIntentId: string): Promise<voi
     throw new Error(data.error || 'Failed to capture payment');
   }
 }
-
-export async function validatePromo(code: string): Promise<{ valid: boolean; reason?: PromoReason }> {
-  const res = await fetch(`${getApiBaseUrl()}/api/validate-promo`, {
-    method: 'POST',
-    headers: getApiHeaders(),
-    body: JSON.stringify({ code }),
-  });
-  return res.json();
-}
-
-export const PROMO_MESSAGES: Record<PromoReason, string> = {
-  invalid_code: 'Invalid promo code. Please try again.',
-  not_yet_active: 'This promo code is not active yet.',
-  expired: 'This promo code has expired.',
-};
 
 export function getQrCodeImageUrl(payUrl: string): string {
   return `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(payUrl)}`;

@@ -5,6 +5,7 @@
 node_modules/
 .DS_Store
 .idea/
+promo-config.json
 
 # Mobile secrets (Vercel bypass token) — copy from secrets.example.ts
 mobile/src/secrets.ts

@@ -4,7 +4,9 @@ import {
   Alert,
   Image,
   Platform,
+  Pressable,
   SafeAreaView,
+  ScrollView,
   StatusBar,
   StyleSheet,
   Text,
@@ -15,46 +17,72 @@ import {
   requestNeededAndroidPermissions,
   useStripeTerminal,
 } from '@stripe/stripe-terminal-react-native';
+import { AppHeader } from './src/components/AppHeader';
 import { Button } from './src/components/Button';
-import { Logo } from './src/components/Logo';
 import {
-  PROMO_MESSAGES,
-  PromoReason,
+  StripeCustomer,
+  StripeProduct,
   capturePaymentIntent,
+  createCustomer,
   createPaymentIntentClientSecret,
+  createProduct,
   createSimulatorPaymentIntent,
   getQrCodeImageUrl,
   getSimulatorPaymentStatus,
-  validatePromo,
+  listCustomers,
+  listProducts,
 } from './src/api';
-import { getApiBaseUrl, isSimulatorMode, PAYMENT_AMOUNT_LABEL } from './src/config';
-import { playPromoFailed, playPromoSuccess } from './src/sounds';
+import { formatMoney, getApiBaseUrl, isSimulatorMode } from './src/config';
 import { theme } from './src/theme';
 
 type Screen =
-  | 'home'
+  | 'customer-select'
+  | 'customer-create'
+  | 'product-select'
+  | 'product-create'
+  | 'review'
   | 'processing'
   | 'payment-success'
   | 'payment-failed'
-  | 'promo-entry'
-  | 'promo-success'
-  | 'promo-failed'
   | 'simulator-pay-qr';
 
+function parseDollarsToCents(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const num = Number(trimmed);
+  if (!Number.isFinite(num) || num <= 0) {
+    return null;
+  }
+  return Math.round(num * 100);
+}
+
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('home');
+  const [screen, setScreen] = useState<Screen>('customer-select');
   const [hasPerms, setHasPerms] = useState(Platform.OS !== 'android');
   const [readerReady, setReaderReady] = useState(isSimulatorMode());
   const [busy, setBusy] = useState(false);
-  const [promoCode, setPromoCode] = useState('');
-  const [promoError, setPromoError] = useState(PROMO_MESSAGES.invalid_code);
   const [statusText, setStatusText] = useState(
     isSimulatorMode()
-      ? 'Simulator preview — Pay Now shows a QR code for test checkout'
+      ? 'Simulator preview — card payments use a QR test checkout'
       : 'Connecting to reader…',
   );
+
+  const [customers, setCustomers] = useState<StripeCustomer[]>([]);
+  const [products, setProducts] = useState<StripeProduct[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<StripeCustomer | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<StripeProduct | null>(null);
+  const [lastAmountLabel, setLastAmountLabel] = useState('');
+
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerEmail, setNewCustomerEmail] = useState('');
+  const [newProductName, setNewProductName] = useState('');
+  const [newProductAmount, setNewProductAmount] = useState('');
+
   const [payUrl, setPayUrl] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+
   const successTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const paymentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -159,6 +187,60 @@ export default function App() {
     }
   };
 
+  const resetCheckout = () => {
+    stopPaymentPolling();
+    setPayUrl(null);
+    setPayError(null);
+    setSelectedCustomer(null);
+    setSelectedProduct(null);
+    setNewCustomerName('');
+    setNewCustomerEmail('');
+    setNewProductName('');
+    setNewProductAmount('');
+    if (successTimeout.current) {
+      clearTimeout(successTimeout.current);
+      successTimeout.current = null;
+    }
+    setScreen('customer-select');
+    setBusy(false);
+  };
+
+  const loadCustomers = async () => {
+    setBusy(true);
+    try {
+      setCustomers(await listCustomers());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not load customers';
+      Alert.alert('Error', `${message}\n\nBackend: ${getApiBaseUrl()}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const loadProducts = async () => {
+    setBusy(true);
+    try {
+      setProducts(await listProducts());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not load products';
+      Alert.alert('Error', message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (screen === 'customer-select') {
+      loadCustomers();
+    }
+  }, [screen]);
+
+  useEffect(() => {
+    if (screen === 'product-select') {
+      loadProducts();
+    }
+  }, [screen]);
+
   const startPaymentPolling = (piId: string) => {
     stopPaymentPolling();
     paymentPollRef.current = setInterval(async () => {
@@ -167,30 +249,62 @@ export default function App() {
         if (piStatus === 'succeeded') {
           stopPaymentPolling();
           setScreen('payment-success');
-          successTimeout.current = setTimeout(goHome, 5000);
+          successTimeout.current = setTimeout(resetCheckout, 5000);
         }
       } catch {
-        // Keep polling — transient network errors are expected.
+        // Keep polling on transient errors.
       }
     }, 2000);
   };
 
-  const goHome = () => {
-    stopPaymentPolling();
-    setPayUrl(null);
-    setPayError(null);
-    if (successTimeout.current) {
-      clearTimeout(successTimeout.current);
-      successTimeout.current = null;
-    }
-    setScreen('home');
-    setBusy(false);
-  };
-
-  const handlePayNow = async () => {
-    if (!readerReady || busy) {
+  const handleCreateCustomer = async () => {
+    if (!newCustomerName.trim() || busy) {
       return;
     }
+    setBusy(true);
+    try {
+      const customer = await createCustomer({
+        name: newCustomerName.trim(),
+        email: newCustomerEmail.trim() || undefined,
+      });
+      setSelectedCustomer(customer);
+      setScreen('product-select');
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not create customer');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCreateProduct = async () => {
+    const unitAmount = parseDollarsToCents(newProductAmount);
+    if (!newProductName.trim() || unitAmount === null || busy) {
+      Alert.alert('Invalid product', 'Enter a name and price greater than zero.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const product = await createProduct({ name: newProductName.trim(), unitAmount });
+      setSelectedProduct(product);
+      setScreen('review');
+    } catch (err) {
+      Alert.alert('Error', err instanceof Error ? err.message : 'Could not create product');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCollectPayment = async () => {
+    if (!selectedCustomer?.id || !selectedProduct?.priceId || !readerReady || busy) {
+      return;
+    }
+
+    const checkout = { customerId: selectedCustomer.id, priceId: selectedProduct.priceId };
+    const amountLabel = formatMoney(
+      selectedProduct.unitAmount ?? 0,
+      selectedProduct.currency,
+    );
+    setLastAmountLabel(amountLabel);
 
     if (isSimulatorMode()) {
       setBusy(true);
@@ -198,8 +312,9 @@ export default function App() {
       setPayError(null);
       setScreen('simulator-pay-qr');
       try {
-        const result = await createSimulatorPaymentIntent();
+        const result = await createSimulatorPaymentIntent(checkout);
         setPayUrl(result.payUrl);
+        setLastAmountLabel(formatMoney(result.amount, result.currency));
         startPaymentPolling(result.paymentIntentId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not create payment';
@@ -215,7 +330,7 @@ export default function App() {
     setStatusText('Preparing payment…');
 
     try {
-      const clientSecret = await createPaymentIntentClientSecret();
+      const { clientSecret } = await createPaymentIntentClientSecret(checkout);
       const { paymentIntent, error: retrieveError } = await retrievePaymentIntent(clientSecret);
       if (retrieveError || !paymentIntent) {
         throw new Error(retrieveError?.message || 'Could not retrieve payment intent');
@@ -245,11 +360,11 @@ export default function App() {
       }
 
       setScreen('payment-success');
-      successTimeout.current = setTimeout(goHome, 5000);
+      successTimeout.current = setTimeout(resetCheckout, 5000);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Payment failed';
       if (message.toLowerCase().includes('cancel')) {
-        goHome();
+        setScreen('review');
         return;
       }
       Alert.alert('Payment unsuccessful', message);
@@ -262,59 +377,179 @@ export default function App() {
 
   const handleCancelPayment = async () => {
     await cancelCollectPaymentMethod();
-    goHome();
+    setScreen('review');
   };
 
-  const handleValidatePromo = async () => {
-    if (!promoCode.trim() || busy) {
-      return;
-    }
-    setBusy(true);
-    try {
-      const result = await validatePromo(promoCode.trim());
-      if (result.valid) {
-        playPromoSuccess();
-        setScreen('promo-success');
-      } else {
-        playPromoFailed();
-        setPromoError(PROMO_MESSAGES[result.reason as PromoReason] || PROMO_MESSAGES.invalid_code);
-        setScreen('promo-failed');
-      }
-    } catch {
-      Alert.alert('Network error', `Could not reach backend at ${getApiBaseUrl()}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const renderHome = () => (
-    <View style={styles.screenBody}>
-      <Logo />
+  const renderCustomerSelect = () => (
+    <ScrollView contentContainerStyle={styles.scrollBody}>
+      <AppHeader subtitle="Select a customer" />
       {statusText ? <Text style={styles.statusText}>{statusText}</Text> : null}
+      {busy && customers.length === 0 ? (
+        <ActivityIndicator size="large" color={theme.primary} />
+      ) : (
+        <View style={styles.list}>
+          {customers.map((c) => (
+            <Pressable
+              key={c.id}
+              style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
+              onPress={() => {
+                setSelectedCustomer(c);
+                setScreen('product-select');
+              }}
+            >
+              <Text style={styles.listItemTitle}>{c.name}</Text>
+              {c.email ? <Text style={styles.listItemDetail}>{c.email}</Text> : null}
+            </Pressable>
+          ))}
+        </View>
+      )}
       <View style={styles.buttonGroup}>
         <Button
-          label="Pay Now"
-          onPress={handlePayNow}
-          disabled={!readerReady || busy}
-          level
-        />
-        <Button
-          label="Pay with Promo"
-          onPress={() => {
-            setPromoCode('');
-            setScreen('promo-entry');
-          }}
+          label="Create new customer"
+          onPress={() => setScreen('customer-create')}
           variant="secondary"
-          level
+        />
+        <Button label="Refresh list" onPress={loadCustomers} loading={busy} disabled={busy} />
+      </View>
+    </ScrollView>
+  );
+
+  const renderCustomerCreate = () => (
+    <ScrollView contentContainerStyle={styles.scrollBody}>
+      <AppHeader subtitle="New customer" compact />
+      <TextInput
+        style={styles.input}
+        value={newCustomerName}
+        onChangeText={setNewCustomerName}
+        placeholder="Full name"
+        placeholderTextColor={theme.slate}
+      />
+      <TextInput
+        style={styles.input}
+        value={newCustomerEmail}
+        onChangeText={setNewCustomerEmail}
+        placeholder="Email (optional)"
+        placeholderTextColor={theme.slate}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      <View style={styles.buttonGroup}>
+        <Button label="Save customer" onPress={handleCreateCustomer} loading={busy} disabled={busy} />
+        <Button
+          label="Back"
+          onPress={() => setScreen('customer-select')}
+          variant="secondary"
         />
       </View>
-    </View>
+    </ScrollView>
   );
+
+  const renderProductSelect = () => (
+    <ScrollView contentContainerStyle={styles.scrollBody}>
+      <AppHeader
+        subtitle={selectedCustomer ? `Customer: ${selectedCustomer.name}` : 'Select a product'}
+        compact
+      />
+      {busy && products.length === 0 ? (
+        <ActivityIndicator size="large" color={theme.primary} />
+      ) : (
+        <View style={styles.list}>
+          {products.map((p) => (
+            <Pressable
+              key={p.id}
+              style={({ pressed }) => [styles.listItem, pressed && styles.listItemPressed]}
+              onPress={() => {
+                setSelectedProduct(p);
+                setScreen('review');
+              }}
+            >
+              <Text style={styles.listItemTitle}>{p.name}</Text>
+              {p.unitAmount != null ? (
+                <Text style={styles.listItemDetail}>{formatMoney(p.unitAmount, p.currency)}</Text>
+              ) : null}
+            </Pressable>
+          ))}
+        </View>
+      )}
+      <View style={styles.buttonGroup}>
+        <Button
+          label="Create new product"
+          onPress={() => setScreen('product-create')}
+          variant="secondary"
+        />
+        <Button label="Back" onPress={() => setScreen('customer-select')} variant="secondary" />
+        <Button label="Refresh list" onPress={loadProducts} loading={busy} disabled={busy} />
+      </View>
+    </ScrollView>
+  );
+
+  const renderProductCreate = () => (
+    <ScrollView contentContainerStyle={styles.scrollBody}>
+      <AppHeader subtitle="New product" compact />
+      <TextInput
+        style={styles.input}
+        value={newProductName}
+        onChangeText={setNewProductName}
+        placeholder="Product name"
+        placeholderTextColor={theme.slate}
+      />
+      <TextInput
+        style={styles.input}
+        value={newProductAmount}
+        onChangeText={setNewProductAmount}
+        placeholder="Price in AUD (e.g. 8.00)"
+        placeholderTextColor={theme.slate}
+        keyboardType="decimal-pad"
+      />
+      <View style={styles.buttonGroup}>
+        <Button label="Save product" onPress={handleCreateProduct} loading={busy} disabled={busy} />
+        <Button label="Back" onPress={() => setScreen('product-select')} variant="secondary" />
+      </View>
+    </ScrollView>
+  );
+
+  const renderReview = () => {
+    const amountLabel =
+      selectedProduct?.unitAmount != null
+        ? formatMoney(selectedProduct.unitAmount, selectedProduct.currency)
+        : '';
+    return (
+      <View style={styles.screenBody}>
+        <AppHeader subtitle="Review and pay" compact />
+        <View style={styles.summaryCard}>
+          <Text style={styles.summaryLabel}>Customer</Text>
+          <Text style={styles.summaryValue}>{selectedCustomer?.name}</Text>
+          <Text style={styles.summaryLabel}>Product</Text>
+          <Text style={styles.summaryValue}>{selectedProduct?.name}</Text>
+          <Text style={styles.summaryLabel}>Amount</Text>
+          <Text style={styles.summaryAmount}>{amountLabel}</Text>
+        </View>
+        <View style={styles.buttonGroup}>
+          <Button
+            label="Collect payment"
+            onPress={handleCollectPayment}
+            disabled={!readerReady || busy}
+            loading={busy}
+          />
+          <Button
+            label="Change product"
+            onPress={() => setScreen('product-select')}
+            variant="secondary"
+          />
+          <Button
+            label="Change customer"
+            onPress={() => setScreen('customer-select')}
+            variant="secondary"
+          />
+        </View>
+      </View>
+    );
+  };
 
   const renderProcessing = () => (
     <View style={styles.screenBody}>
-      <Logo small />
-      <ActivityIndicator size="large" color={theme.pink} />
+      <AppHeader compact />
+      <ActivityIndicator size="large" color={theme.primary} />
       <Text style={styles.title}>Waiting for card…</Text>
       <Text style={styles.subText}>{statusText || 'Please tap, insert, or swipe on the reader.'}</Text>
       <Button label="Cancel" onPress={handleCancelPayment} variant="secondary" />
@@ -326,9 +561,9 @@ export default function App() {
       <View style={[styles.iconCircle, styles.iconSuccess]}>
         <Text style={styles.iconGlyph}>✓</Text>
       </View>
-      <Text style={styles.title}>Payment successful!</Text>
-      <Text style={styles.amount}>{PAYMENT_AMOUNT_LABEL}</Text>
-      <Button label="Done" onPress={goHome} />
+      <Text style={styles.title}>Payment successful</Text>
+      <Text style={styles.amount}>{lastAmountLabel}</Text>
+      <Button label="Done" onPress={resetCheckout} />
     </View>
   );
 
@@ -339,55 +574,14 @@ export default function App() {
       </View>
       <Text style={styles.title}>Payment unsuccessful</Text>
       <Text style={styles.subText}>Please try again or contact staff.</Text>
-      <Button label="Try Again" onPress={goHome} />
-    </View>
-  );
-
-  const renderPromoEntry = () => (
-    <View style={styles.screenBody}>
-      <Logo small />
-      <Text style={[styles.title, styles.levelControl]}>Enter Promo Code</Text>
-      <TextInput
-        style={[styles.promoInput, styles.levelControl]}
-        value={promoCode}
-        onChangeText={(value) => setPromoCode(value.toUpperCase())}
-        placeholder="e.g. DEMO2026"
-        placeholderTextColor="rgba(255, 45, 138, 0.4)"
-        autoCapitalize="characters"
-        autoCorrect={false}
-      />
-      <View style={styles.buttonGroup}>
-        <Button label="Validate" onPress={handleValidatePromo} loading={busy} disabled={busy} level />
-        <Button label="Back" onPress={goHome} variant="secondary" level />
-      </View>
-    </View>
-  );
-
-  const renderPromoSuccess = () => (
-    <View style={styles.screenBody}>
-      <View style={[styles.iconCircle, styles.iconSuccess]}>
-        <Text style={styles.iconGlyph}>✓</Text>
-      </View>
-      <Text style={[styles.title, styles.levelControl]}>Promo code accepted!</Text>
-      <Button label="Done" onPress={goHome} level />
-    </View>
-  );
-
-  const renderPromoFailed = () => (
-    <View style={styles.screenBody}>
-      <View style={[styles.iconCircle, styles.iconError]}>
-        <Text style={styles.iconGlyph}>✗</Text>
-      </View>
-      <Text style={[styles.title, styles.levelControl]}>{promoError}</Text>
-      <Button label="Try Again" onPress={() => setScreen('promo-entry')} level />
+      <Button label="Try again" onPress={() => setScreen('review')} />
     </View>
   );
 
   const renderSimulatorPayQr = () => (
     <View style={styles.screenBody}>
-      <Logo small />
-      <Text style={[styles.title, styles.levelControl]}>Scan to pay</Text>
-      <Text style={styles.subText}>{PAYMENT_AMOUNT_LABEL}</Text>
+      <AppHeader subtitle="Scan to pay" compact />
+      <Text style={styles.amount}>{lastAmountLabel}</Text>
       {payError ? (
         <Text style={styles.payError}>{payError}</Text>
       ) : payUrl ? (
@@ -399,25 +593,26 @@ export default function App() {
           />
         </View>
       ) : (
-        <ActivityIndicator size="large" color={theme.pink} />
+        <ActivityIndicator size="large" color={theme.primary} />
       )}
       <Text style={styles.subText}>
         Scan with your phone camera, then pay with test card 4242 4242 4242 4242.
       </Text>
-      <Button label="Cancel" onPress={goHome} variant="secondary" level />
+      <Button label="Cancel" onPress={resetCheckout} variant="secondary" />
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={theme.white} />
-      {screen === 'home' && renderHome()}
+      {screen === 'customer-select' && renderCustomerSelect()}
+      {screen === 'customer-create' && renderCustomerCreate()}
+      {screen === 'product-select' && renderProductSelect()}
+      {screen === 'product-create' && renderProductCreate()}
+      {screen === 'review' && renderReview()}
       {screen === 'processing' && renderProcessing()}
       {screen === 'payment-success' && renderPaymentSuccess()}
       {screen === 'payment-failed' && renderPaymentFailed()}
-      {screen === 'promo-entry' && renderPromoEntry()}
-      {screen === 'promo-success' && renderPromoSuccess()}
-      {screen === 'promo-failed' && renderPromoFailed()}
       {screen === 'simulator-pay-qr' && renderSimulatorPayQr()}
     </SafeAreaView>
   );
@@ -433,41 +628,100 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 24,
-    gap: 28,
+    gap: 20,
+  },
+  scrollBody: {
+    flexGrow: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    gap: 16,
   },
   buttonGroup: {
     width: '100%',
-    gap: 16,
+    gap: 12,
     marginTop: 8,
   },
   title: {
     fontSize: 22,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    color: theme.black,
+    fontWeight: '700',
+    color: theme.navy,
     textAlign: 'center',
-    transform: [{ rotate: '-6deg' }],
   },
   subText: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '500',
     color: theme.slate,
     textAlign: 'center',
   },
   amount: {
     fontSize: 24,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    color: theme.pink,
-    textTransform: 'uppercase',
+    fontWeight: '700',
+    color: theme.primary,
   },
   statusText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '500',
     color: theme.slate,
     textAlign: 'center',
+  },
+  list: {
+    width: '100%',
+    gap: 10,
+  },
+  listItem: {
+    width: '100%',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 37, 64, 0.12)',
+    backgroundColor: theme.white,
+  },
+  listItemPressed: {
+    backgroundColor: theme.primaryDim,
+  },
+  listItemTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.navy,
+  },
+  listItemDetail: {
+    fontSize: 14,
+    color: theme.slate,
+    marginTop: 4,
+  },
+  input: {
+    width: '100%',
+    minHeight: 52,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 37, 64, 0.2)',
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: theme.navy,
+  },
+  summaryCard: {
+    width: '100%',
+    padding: 20,
+    borderRadius: 12,
+    backgroundColor: theme.primaryDim,
+    gap: 6,
+  },
+  summaryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: theme.slate,
+    marginTop: 8,
+  },
+  summaryValue: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: theme.navy,
+  },
+  summaryAmount: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: theme.primary,
   },
   iconCircle: {
     width: 88,
@@ -476,45 +730,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
-    transform: [{ rotate: '-6deg' }],
   },
   iconSuccess: {
-    backgroundColor: theme.pinkDim,
-    borderColor: theme.pink,
+    backgroundColor: 'rgba(0, 214, 107, 0.12)',
+    borderColor: theme.success,
   },
   iconError: {
-    backgroundColor: 'rgba(255, 45, 138, 0.08)',
-    borderColor: theme.pink,
+    backgroundColor: 'rgba(255, 68, 68, 0.08)',
+    borderColor: theme.error,
   },
   iconGlyph: {
     fontSize: 44,
-    fontWeight: '800',
-    color: theme.pink,
-  },
-  promoInput: {
-    width: '100%',
-    minHeight: 64,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: theme.pink,
-    backgroundColor: theme.white,
-    color: theme.pink,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    transform: [{ rotate: '-6deg' }],
-  },
-  levelControl: {
-    transform: [{ rotate: '0deg' }],
+    fontWeight: '700',
+    color: theme.navy,
   },
   qrFrame: {
     padding: 16,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: theme.pink,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(10, 37, 64, 0.12)',
     backgroundColor: theme.white,
   },
   qrImage: {
@@ -523,8 +757,8 @@ const styles = StyleSheet.create({
   },
   payError: {
     fontSize: 14,
-    fontWeight: '600',
-    color: theme.pink,
+    fontWeight: '500',
+    color: theme.error,
     textAlign: 'center',
   },
 });

@@ -1,19 +1,30 @@
 import React from 'react';
-import { Image, ImageStyle, StyleSheet } from 'react-native';
+import { Image, ImageStyle, Pressable, StyleSheet } from 'react-native';
 
 type Props = {
   small?: boolean;
   style?: ImageStyle;
+  onPress?: () => void;
 };
 
-export function Logo({ small, style }: Props) {
-  return (
+export function Logo({ small, style, onPress }: Props) {
+  const image = (
     <Image
       source={require('../assets/logo.png')}
       style={[styles.logo, small && styles.logoSmall, style]}
       resizeMode="contain"
       accessibilityLabel="Social Booth"
     />
+  );
+
+  if (!onPress) {
+    return image;
+  }
+
+  return (
+    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel="Social Booth">
+      {image}
+    </Pressable>
   );
 }
 

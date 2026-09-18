@@ -14,7 +14,6 @@ type Props = {
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   loading?: boolean;
-  level?: boolean;
   style?: ViewStyle;
 };
 
@@ -24,7 +23,6 @@ export function Button({
   variant = 'primary',
   disabled,
   loading,
-  level = false,
   style,
 }: Props) {
   const isPrimary = variant === 'primary';
@@ -34,16 +32,15 @@ export function Button({
       style={({ pressed }) => [
         styles.base,
         isPrimary ? styles.primary : styles.secondary,
-        level && styles.level,
         (disabled || loading) && styles.disabled,
-        pressed && (level ? styles.pressedLevel : styles.pressed),
+        pressed && styles.pressed,
         style,
       ]}
       onPress={onPress}
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator color={isPrimary ? theme.black : theme.pink} />
+        <ActivityIndicator color={isPrimary ? theme.white : theme.primary} />
       ) : (
         <Text style={[styles.label, isPrimary ? styles.primaryLabel : styles.secondaryLabel]}>
           {label}
@@ -56,49 +53,33 @@ export function Button({
 const styles = StyleSheet.create({
   base: {
     width: '100%',
-    minHeight: 64,
-    borderRadius: 14,
+    minHeight: 56,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    transform: [{ rotate: '-6deg' }],
-  },
-  level: {
-    transform: [{ rotate: '0deg' }],
   },
   primary: {
-    backgroundColor: theme.pink,
-    shadowColor: theme.pink,
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    backgroundColor: theme.primary,
   },
   secondary: {
     backgroundColor: 'transparent',
     borderWidth: 2,
-    borderColor: theme.pink,
+    borderColor: theme.primary,
   },
   label: {
     fontSize: 17,
-    fontWeight: '800',
-    fontStyle: 'italic',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
+    fontWeight: '600',
   },
   primaryLabel: {
-    color: theme.black,
+    color: theme.white,
   },
   secondaryLabel: {
-    color: theme.pink,
+    color: theme.primary,
   },
   disabled: {
     opacity: 0.45,
   },
   pressed: {
     opacity: 0.9,
-  },
-  pressedLevel: {
-    opacity: 0.9,
-    transform: [{ scale: 0.98 }],
   },
 });

@@ -1,8 +1,10 @@
 export const theme = {
-  pink: '#ff2d8a',
-  pinkDim: 'rgba(255, 45, 138, 0.12)',
-  black: '#000000',
+  primary: '#635BFF',
+  primaryDim: 'rgba(99, 91, 255, 0.12)',
+  success: '#00D66B',
+  error: '#FF4444',
+  navy: '#0a2540',
+  black: '#0a2540',
   white: '#ffffff',
-  slate: 'rgba(0, 0, 0, 0.55)',
-  slantDeg: '-6deg',
+  slate: 'rgba(10, 37, 64, 0.65)',
 };
