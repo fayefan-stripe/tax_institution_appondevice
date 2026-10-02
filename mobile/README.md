@@ -296,7 +296,7 @@ Docs: [Submit your app](https://docs.stripe.com/terminal/features/apps-on-device
 | **S710 registered** | Dashboard → **Terminal → Readers** |
 | **Location created** | Dashboard → **Terminal → Locations** |
 | **Production config** | In `src/config.ts`: set `API_BASE_URL` to your Vercel HTTPS URL (or `BACKEND_HOST_LAN` for local Wi‑Fi) |
-| **Package name** | `com.socialboothmobile` — must match Dashboard exactly |
+| **Package name** | `com.taxmobile` — must match Dashboard exactly |
 
 ### Step 1 — Bump version and build a release APK
 
@@ -332,7 +332,7 @@ APK must be **≤ 200 MB**. For production you will need a release keystore; con
 3. Click **Create app**
 4. Enter:
    - **App name:** `Social Booth`
-   - **Package name:** `com.socialboothmobile`
+   - **Package name:** `com.taxmobile`
 5. Click **Create app**
 
 ### Step 3 — Upload APK for review
@@ -401,7 +401,7 @@ The reader downloads the app, reboots, and installs it. Reboot manually to apply
 [ ] API_BASE_URL or BACKEND_HOST_LAN set in mobile/src/config.ts
 [ ] Bump versionCode in mobile/android/app/build.gradle
 [ ] ./gradlew assembleRelease
-[ ] Dashboard → Terminal → Software → Create app (com.socialboothmobile)
+[ ] Dashboard → Terminal → Software → Create app (com.taxmobile)
 [ ] Upload APK → Submit for review
 [ ] Review approved
 [ ] Create deploy group + add location

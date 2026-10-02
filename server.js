@@ -104,6 +104,18 @@ function mapProduct(product, price) {
   };
 }
 
+// Connection tokens for Terminal SDK (Apps on Devices can also use AppsOnDevicesConnectionTokenProvider,
+// but some readers reject device-side CreateConnectionToken — backend tokens are the reliable path.)
+app.post('/api/connection-token', async (req, res) => {
+  try {
+    const connectionToken = await stripe.terminal.connectionTokens.create();
+    return res.json({ secret: connectionToken.secret });
+  } catch (err) {
+    console.error('connection-token error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/customers', async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 20, 100);

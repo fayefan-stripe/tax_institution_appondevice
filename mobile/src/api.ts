@@ -32,6 +32,19 @@ export function getApiHeaders(extra?: Record<string, string>): Record<string, st
   return headers;
 }
 
+/** Fetch a Terminal ConnectionToken secret from the backend. */
+export async function fetchConnectionToken(): Promise<string> {
+  const res = await fetch(`${getApiBaseUrl()}/api/connection-token`, {
+    method: 'POST',
+    headers: getApiHeaders(),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !data.secret) {
+    throw new Error(data.error || 'Failed to fetch connection token');
+  }
+  return data.secret as string;
+}
+
 export async function listCustomers(query?: string): Promise<StripeCustomer[]> {
   const params = new URLSearchParams();
   if (query?.trim()) {

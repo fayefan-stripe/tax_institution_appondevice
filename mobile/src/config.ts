@@ -12,7 +12,7 @@ export const API_BASE_URL = 'https://tax-institution-appondevice.vercelapp.strip
 
 // Your laptop's Wi-Fi IP — fallback when API_BASE_URL is empty (same network as S710).
 // Find it with: ipconfig getifaddr en0
-export const BACKEND_HOST_LAN = '192.168.141.230';
+export const BACKEND_HOST_LAN = '192.168.141.110';
 
 export const DEFAULT_CURRENCY = 'aud';
 

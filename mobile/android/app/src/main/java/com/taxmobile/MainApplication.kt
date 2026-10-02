@@ -1,4 +1,4 @@
-package com.socialboothmobile
+package com.taxmobile
 
 import android.app.Application
 import com.facebook.react.PackageList

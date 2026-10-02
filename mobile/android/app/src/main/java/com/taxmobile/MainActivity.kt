@@ -1,4 +1,4 @@
-package com.socialboothmobile
+package com.taxmobile
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
