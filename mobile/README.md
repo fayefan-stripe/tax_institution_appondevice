@@ -1,19 +1,70 @@
-# Social Booth — Mobile (Apps on Devices)
+# Tax Institution — Mobile (Apps on Devices)
 
-React Native app for the **Stripe Reader S710**, using [Apps on Devices](https://docs.stripe.com/terminal/features/apps-on-devices/build?terminal-sdk-platform=react-native).
+React Native app for the **Stripe Reader S710 / DevKit**, using [Apps on Devices](https://docs.stripe.com/terminal/features/apps-on-devices/build?terminal-sdk-platform=react-native).
 
-The S710 runs this app as its kiosk UI. Your laptop runs the Express backend for PaymentIntent creation, capture, and promo validation.
+The reader runs this app as its kiosk UI. The Express backend (local or Vercel) creates PaymentIntents, connection tokens, and handles capture.
 
 ---
 
 ## Architecture
 
 ```
-S710 (this app)  ──SDK handoff──►  Stripe Reader app (card collection)
+S710 / DevKit (this app)
        │
-       └── HTTP ──►  Laptop Express server (port 3000)
-                         └── Stripe API
+       ├── SDK handoff ──► Stripe Reader app (card collection)
+       │
+       └── HTTPS/HTTP ──► Express backend (Vercel or laptop :3000)
+                              ├── POST /api/connection-token
+                              ├── POST /api/create-payment-intent
+                              └── Stripe API
 ```
+
+**Package name:** `com.taxmobile` (must match the Dashboard Terminal app exactly).
+
+---
+
+## Connection token issue (and fix)
+
+### Symptom
+
+On DevKit / Apps on Devices, reader discovery fails with:
+
+```text
+No readers found during discovery
+```
+
+`adb logcat` shows the real cause:
+
+```text
+UNAUTHORIZED: CreateConnectionToken is not enabled for package: com.taxmobile
+```
+
+(or the older package `com.socialboothmobile`)
+
+### What was going wrong
+
+With `AppsOnDevicesConnectionTokenProvider`, the SDK asks the on-device Stripe Reader service (`com.stripe.reader`) to mint a connection token via handoff RPC.
+
+Even when the APK was:
+
+- uploaded and **approved** in Dashboard → Terminal → Software
+- deployed to the DevKit’s **deploy group** as the **preferred kiosk app**
+
+the reader OS still returned `CreateConnectionToken is not enabled for package`. That is a device-side allowlist failure, not a bad secret key or a missing Dashboard deploy. The UI then surfaces the secondary error “No readers found during discovery.”
+
+Sideloading with `adb install` can make this worse (overwriting the Stripe-managed install), but a clean Dashboard redeploy alone did **not** clear the UNAUTHORIZED error on this DevKit.
+
+### Fix
+
+Do **not** rely on `AppsOnDevicesConnectionTokenProvider` for this project. Use a normal backend token provider instead:
+
+1. **Backend** — `POST /api/connection-token` calls `stripe.terminal.connectionTokens.create()` and returns `{ secret }`.
+2. **App** — `Root.tsx` passes that secret via `StripeTerminalProvider`’s `tokenProvider` (see `fetchConnectionToken()` in `src/api.ts`).
+3. **Discovery** — keep `easyConnect({ discoveryMethod: 'appsOnDevices' })` for Apps on Devices handoff payments.
+
+After this change, logcat should show connection to the local reader (e.g. `Connected to the reader` / `tmr_…`) without the CreateConnectionToken UNAUTHORIZED error.
+
+Ensure `API_BASE_URL` points at a deployed backend that includes `/api/connection-token` (Vercel), or use `BACKEND_HOST_LAN` for local Wi‑Fi testing.
 
 ---
 
@@ -331,7 +382,7 @@ APK must be **≤ 200 MB**. For production you will need a release keystore; con
 2. Go to **Terminal → Software**
 3. Click **Create app**
 4. Enter:
-   - **App name:** `Social Booth`
+   - **App name:** `Tax Mobile`
    - **Package name:** `com.taxmobile`
 5. Click **Create app**
 
@@ -421,6 +472,7 @@ The reader downloads the app, reboots, and installs it. Reboot manually to apply
 
 | Endpoint | Purpose |
 |----------|---------|
+| `POST /api/connection-token` | Returns Terminal ConnectionToken `secret` for the SDK |
 | `POST /api/create-payment-intent` | Returns `clientSecret` for SDK |
 | `POST /api/capture-payment-intent` | Captures manual-capture PI |
 | `POST /api/validate-promo` | Promo code validation |
@@ -432,11 +484,11 @@ The reader downloads the app, reboots, and installs it. Reboot manually to apply
 ```
 mobile/
 ├── App.tsx              # Screens + payment/promo flow
-├── Root.tsx             # StripeTerminalProvider (AoD token provider)
+├── Root.tsx             # StripeTerminalProvider (backend tokenProvider)
 ├── src/
 │   ├── config.ts        # API_BASE_URL, BACKEND_HOST_LAN
-│   ├── api.ts           # Backend fetch helpers
-│   ├── theme.ts         # Social Booth colors
+│   ├── api.ts           # Backend fetch helpers (incl. connection token)
+│   ├── theme.ts         # Colors
 │   └── components/      # Logo, Button
 ├── scripts/
 │   ├── launch-emulator.sh
@@ -447,6 +499,25 @@ mobile/
 ---
 
 ## Troubleshooting
+
+### `CreateConnectionToken is not enabled for package` / `No readers found during discovery`
+
+This is the Apps on Devices handoff token failure described in [Connection token issue (and fix)](#connection-token-issue-and-fix).
+
+**Do this:**
+
+1. Confirm the app uses the **backend** `tokenProvider` in `Root.tsx` (not `AppsOnDevicesConnectionTokenProvider`).
+2. Confirm `POST /api/connection-token` works on the backend the device calls (`API_BASE_URL` / Vercel).
+3. Rebuild/redeploy the APK after changing token provider code.
+4. On DevKit, grant location permission; without it, discovery still fails.
+
+**Logcat filter:**
+
+```bash
+adb logcat -v time | grep -iE 'CreateConnectionToken|UNAUTHORIZED|connection-token|Connected to the reader|No readers'
+```
+
+Success looks like `Connected to the reader` with your `tmr_…` id. Failure still shows `CreateConnectionToken is not enabled` if an old APK with `AppsOnDevicesConnectionTokenProvider` is installed.
 
 ### `EADDRINUSE` on port 8081
 
@@ -486,20 +557,19 @@ Set `ANDROID_HOME` and create `mobile/android/local.properties` — see [one-tim
 
 ### Pay button disabled (DevKit) / stuck on "Connecting to reader…"
 
-**Pay Now** stays disabled until the Stripe Terminal SDK connects to the built-in reader — this is separate from your laptop backend (promo can work while Pay Now is still greyed out).
+**Pay Now** stays disabled until the Stripe Terminal SDK connects to the built-in reader — this is separate from promo validation.
 
 Checklist:
 
 1. **Location permission** — accept the prompt on first launch; without it, reader connection fails.
-2. **Reader online** — Dashboard → **Terminal → Readers** → your S710 shows **Online**.
-3. **Same Stripe mode** — test APK uses test mode; live APK uses live mode.
-4. **Apps on Devices enabled** on your Stripe account.
-5. **Deployed kiosk app** — after Dashboard approval, deploy the version and reboot the reader.
-6. **Status message** — if it shows `Init error:` or `Reader error:`, that text is the actual failure (not a backend issue).
+2. **Backend connection tokens** — app must use `/api/connection-token` (see [Connection token issue](#connection-token-issue-and-fix)). Old builds using `AppsOnDevicesConnectionTokenProvider` fail with CreateConnectionToken UNAUTHORIZED.
+3. **Reader online** — Dashboard → **Terminal → Readers** → your device shows **Online**.
+4. **Same Stripe mode** — test APK uses test mode; live APK uses live mode.
+5. **Apps on Devices enabled** on your Stripe account.
+6. **Deployed kiosk app** — after Dashboard approval, deploy the version and reboot the reader (preferred for persistence; `adb install` is fine for DevKit iteration).
+7. **Status message** — if it shows `Init error:` or `Reader error:`, that text is the actual failure.
 
-If the status stays on "Connecting to reader…" with no error, reboot the S710 and relaunch the app. After code changes, bump `versionCode`, rebuild the release APK, redeploy, and reboot.
-
-Wait for reader connection, or check Apps on Devices is enabled on your Stripe account.
+If the status stays on "Connecting to reader…" with no error, reboot the reader and relaunch the app. After code changes, bump `versionCode`, rebuild the release APK, redeploy or `adb install`, and retry.
 
 ### `Asset version with same package name, version code and build variant already exists`
 
